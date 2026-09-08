@@ -27,6 +27,7 @@ export interface Entry {
   is_favorite: boolean;
   created_at: string;
   updated_at: string;
+  deleted_at?: string | null;
   // 联表查询附加字段
   tag_names?: string;
   tag_colors?: string;

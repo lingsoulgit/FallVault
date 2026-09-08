@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Plus, Moon, Sun, Globe, Download, Upload, FileSpreadsheet, FileText, FileJson, FileCode2, FileInput } from 'lucide-react';
+import { Search, Plus, Moon, Sun, Globe, Download, Upload, FileSpreadsheet, FileText, FileJson, FileCode2, FileInput, Trash2 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
 import { THEMES } from '@/types';
@@ -11,9 +11,14 @@ import { importBrowserCsv } from '@/lib/csvImport';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile, mkdir } from '@tauri-apps/plugin-fs';
 import { basename } from '@tauri-apps/api/path';
+import { emptyTrash } from '@/lib/db';
+import { TRASH_VIEW_ID } from '@/lib/constants';
 
 export function TopBar() {
-  const { searchQuery, setSearchQuery, settings, updateSettings } = useAppStore();
+  const {
+    searchQuery, setSearchQuery, settings, updateSettings, selectedFolderId,
+    trashEntries, refreshAll, setConfirmDialog,
+  } = useAppStore();
   const { addToast } = useToastStore();
   const t = (k: LangKey) => translate(settings.language, k);
   const isEn = settings.language === 'en';
@@ -163,6 +168,53 @@ export function TopBar() {
       setExportOpen(false);
     }
   };
+
+  const handleEmptyTrash = () => {
+    if (trashEntries.length === 0) return;
+    setConfirmDialog({
+      open: true,
+      title: isEn ? 'Empty Trash' : '清空回收站',
+      message: isEn
+        ? `Permanently delete all ${trashEntries.length} account(s) in Trash? This cannot be undone.`
+        : `确定要永久删除回收站中的 ${trashEntries.length} 个账号吗？此操作无法恢复。`,
+      confirmText: isEn ? 'Empty Trash' : '清空回收站',
+      onConfirm: async () => {
+        try {
+          await emptyTrash();
+          await refreshAll();
+          addToast(isEn ? 'Trash emptied' : '回收站已清空', 'success');
+        } catch {
+          addToast(isEn ? 'Failed to empty Trash' : '清空失败，请重试', 'error');
+        }
+      },
+      onCancel: () => setConfirmDialog({ open: false }),
+    });
+  };
+
+  if (selectedFolderId === TRASH_VIEW_ID) {
+    return (
+      <div className="rune-panel m-3 mb-0 flex items-center gap-3 p-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[rgba(212,112,112,0.1)] text-[var(--danger)]">
+          <Trash2 size={18} />
+        </div>
+        <div>
+          <h1 className="text-sm font-semibold text-[var(--moon)]">{isEn ? 'Trash' : '回收站'}</h1>
+          <p className="mt-0.5 text-xs text-[var(--moon-faint)]">
+            {isEn ? `${trashEntries.length} deleted account(s)` : `${trashEntries.length} 个已删除账号`}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleEmptyTrash}
+          disabled={trashEntries.length === 0}
+          className="rune-btn ml-auto flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <Trash2 size={15} />
+          {isEn ? 'Empty Trash' : '清空回收站'}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="rune-panel m-3 mb-0 p-3 flex items-center gap-3">

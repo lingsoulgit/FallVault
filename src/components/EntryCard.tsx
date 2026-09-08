@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lock, Star, ExternalLink, Copy, Eye, EyeOff, Edit2, Trash2, Paperclip } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
-import { toggleFavorite, deleteEntry } from '@/lib/db';
+import { toggleFavorite, moveEntryToTrash } from '@/lib/db';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { GlareHover } from '@/components/GlareHover';
@@ -98,12 +98,13 @@ export function EntryCard({ entry, index = 0 }: { entry: Entry; index?: number }
     e.stopPropagation();
     setConfirmDialog({
       open: true,
-      title: '删除账号',
-      message: `确定要删除 "${entry.title}" 吗？此操作不可恢复，关联的附件和密码历史也将被删除。`,
+      title: '移入回收站',
+      message: `确定要将 "${entry.title}" 移入回收站吗？之后可以在回收站中恢复。`,
+      confirmText: '移入回收站',
       onConfirm: async () => {
-        await deleteEntry(entry.id);
+        await moveEntryToTrash(entry.id);
         await refreshAll();
-        addToast('账号已删除', 'success');
+        addToast('已移入回收站', 'success');
         setConfirmDialog({ open: false });
       },
       onCancel: () => setConfirmDialog({ open: false }),

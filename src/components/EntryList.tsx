@@ -1,11 +1,13 @@
 import { useAppStore } from '@/stores/appStore';
 import { EntryCard } from './EntryCard';
 import { Lock, Loader2 } from 'lucide-react';
+import { RecycleBin } from './RecycleBin';
+import { FAVORITES_VIEW_ID, TRASH_VIEW_ID } from '@/lib/constants';
 
 export function EntryList() {
   const { entries, isLoading, searchQuery, selectedFolderId, favorites, selectedTagId } = useAppStore();
 
-  const displayEntries = selectedFolderId === -1 ? favorites : entries;
+  const displayEntries = selectedFolderId === FAVORITES_VIEW_ID ? favorites : entries;
 
   if (isLoading) {
     return (
@@ -14,6 +16,10 @@ export function EntryList() {
         <span className="text-sm text-[var(--moon-faint)]">加载中...</span>
       </div>
     );
+  }
+
+  if (selectedFolderId === TRASH_VIEW_ID) {
+    return <RecycleBin />;
   }
 
   if (displayEntries.length === 0) {

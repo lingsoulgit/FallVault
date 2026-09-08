@@ -6,6 +6,10 @@
 export const DEFAULT_BG_RESOURCE = 'default-bg.png';
 export const DEFAULT_BG_TOKEN = `@resource:${DEFAULT_BG_RESOURCE}`;
 
+// 侧边栏虚拟视图 ID（真实分类 ID 均为正整数）
+export const FAVORITES_VIEW_ID = -1;
+export const TRASH_VIEW_ID = -2;
+
 // 内置壁纸清单：id / 名称 / 类型 / 应用时的媒体源 / 预览图
 export interface BuiltinWallpaper {
   id: string;

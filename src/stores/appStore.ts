@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { Entry, Folder, Tag, AppSettings, ThemeDef } from '@/types';
 import { THEMES, applyTheme } from '@/types';
-import { DEFAULT_BG_TOKEN } from '@/lib/constants';
+import { DEFAULT_BG_TOKEN, FAVORITES_VIEW_ID, TRASH_VIEW_ID } from '@/lib/constants';
 
 interface AppState {
   // Data
@@ -9,6 +9,7 @@ interface AppState {
   folders: Folder[];
   tags: Tag[];
   favorites: Entry[];
+  trashEntries: Entry[];
   selectedFolderId: number | null;
   selectedTagId: number | null;
   searchQuery: string;
@@ -44,6 +45,7 @@ interface AppState {
   setFolders: (folders: Folder[]) => void;
   setTags: (tags: Tag[]) => void;
   setFavorites: (favorites: Entry[]) => void;
+  setTrashEntries: (entries: Entry[]) => void;
   setSelectedFolderId: (id: number | null) => void;
   setSelectedTagId: (id: number | null) => void;
   setSearchQuery: (query: string) => void;
@@ -140,6 +142,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   folders: [],
   tags: [],
   favorites: [],
+  trashEntries: [],
   selectedFolderId: null,
   selectedTagId: null,
   searchQuery: '',
@@ -161,6 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setFolders: (folders) => set({ folders }),
   setTags: (tags) => set({ tags }),
   setFavorites: (favorites) => set({ favorites }),
+  setTrashEntries: (trashEntries) => set({ trashEntries }),
   setSelectedFolderId: (id) => set({ selectedFolderId: id, selectedTagId: null, searchQuery: '' }),
   setSelectedTagId: (id) => set({ selectedTagId: id, selectedFolderId: null, searchQuery: '' }),
   setSearchQuery: (query) => set({ searchQuery: query, selectedFolderId: null, selectedTagId: null }),
@@ -210,26 +214,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   refreshAll: async () => {
     set({ isLoading: true });
     try {
-      const { getFolders, getTags, getEntries, getFavorites } = await import('@/lib/db');
+      const { getFolders, getTags, getEntries, getFavorites, getTrashedEntries } = await import('@/lib/db');
       const { isLocked } = await import('@/lib/crypto');
           // 分类/标签不涉及加密，始终可加载
       const [folders, tags] = await Promise.all([getFolders(), getTags()]);
           let entries: any[] = [];
       let favorites: any[] = [];
+      let trashEntries: any[] = [];
       // 账号数据需要解锁后才可读（否则保持空，等解锁后再刷）
       if (!isLocked()) {
         try {
+          const selectedFolderId = get().selectedFolderId;
+          const isVirtualView = selectedFolderId === FAVORITES_VIEW_ID || selectedFolderId === TRASH_VIEW_ID;
           const results = await Promise.all([
-            getEntries(get().selectedFolderId || undefined, get().selectedTagId || undefined, get().searchQuery || undefined),
+            getEntries(isVirtualView ? undefined : selectedFolderId || undefined, get().selectedTagId || undefined, get().searchQuery || undefined),
             getFavorites(),
+            getTrashedEntries(),
           ]);
           entries = results[0];
           favorites = results[1];
+          trashEntries = results[2];
                 } catch (e) {
         }
       } else {
             }
-      set({ folders, tags, entries, favorites });
+      set({ folders, tags, entries, favorites, trashEntries });
     } catch (e) {
       console.error('Refresh failed:', e);
     } finally {

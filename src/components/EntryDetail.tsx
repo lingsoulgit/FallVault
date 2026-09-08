@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lock, Star, ExternalLink, Copy, Eye, EyeOff, Edit2, Trash2, Paperclip, X, Wand2 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
-import { toggleFavorite, deleteEntry } from '@/lib/db';
+import { toggleFavorite, moveEntryToTrash } from '@/lib/db';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { getTotpWithRemaining } from '@/lib/totp';
@@ -95,12 +95,15 @@ export function EntryDetail() {
   const handleDelete = () => {
     setConfirmDialog({
       open: true,
-      title: isEn ? 'Delete account' : '删除账号',
-      message: `确定要删除 "${entry.title}" 吗？此操作不可恢复，关联的附件和密码历史也将被删除。`,
+      title: isEn ? 'Move to Trash' : '移入回收站',
+      message: isEn
+        ? `Move "${entry.title}" to Trash? You can restore it later.`
+        : `确定要将 "${entry.title}" 移入回收站吗？之后可以在回收站中恢复。`,
+      confirmText: isEn ? 'Move to Trash' : '移入回收站',
       onConfirm: async () => {
-        await deleteEntry(entry.id);
+        await moveEntryToTrash(entry.id);
         await refreshAll();
-        addToast(isEn ? 'Account deleted' : '账号已删除', 'success');
+        addToast(isEn ? 'Moved to Trash' : '已移入回收站', 'success');
         setDetailOpen(false);
         setConfirmDialog({ open: false });
       },

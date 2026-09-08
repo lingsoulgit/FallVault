@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS entries (
   is_favorite INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now', 'localtime')),
   updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+  deleted_at TEXT DEFAULT NULL,
   FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
 );
 
@@ -96,17 +97,20 @@ INSERT OR IGNORE INTO tags (id, name, color) VALUES
 export async function initDatabase(): Promise<Database> {
   if (db) return db;
   db = await Database.load(await getDbPath());
+  await db.execute('PRAGMA foreign_keys = ON');
   await db.execute(INIT_SQL);
   // 兼容迁移：老库补列（ALTER TABLE 已存在列会报错，捕获忽略）
   const migrations = [
     "ALTER TABLE entries ADD COLUMN totp_secret TEXT DEFAULT ''",
     "ALTER TABLE entries ADD COLUMN custom_fields TEXT DEFAULT ''",
+    "ALTER TABLE entries ADD COLUMN deleted_at TEXT DEFAULT NULL",
   ];
   for (const m of migrations) {
     try {
       await db.execute(m);
     } catch {}
   }
+  await db.execute('CREATE INDEX IF NOT EXISTS idx_entries_deleted_at ON entries(deleted_at)');
   // 将仍使用旧默认紫色的“重要”标签迁移为橙色；用户自定义过的颜色保持不变
   await db.execute(
     "UPDATE tags SET color = ? WHERE name = ? AND color = ?",
@@ -210,7 +214,7 @@ export async function getEntries(folderId?: number, tagId?: number, search?: str
     LEFT JOIN folders f ON e.folder_id = f.id
   `;
   const params: any[] = [];
-  const conditions: string[] = [];
+  const conditions: string[] = ['e.deleted_at IS NULL'];
 
   const searching = !!(search && search.trim());
   if (folderId !== undefined && !searching) {
@@ -270,7 +274,7 @@ export async function getFavorites(): Promise<Entry[]> {
     FROM entries e
     LEFT JOIN entry_tags et ON e.id = et.entry_id
     LEFT JOIN tags t ON et.tag_id = t.id
-    WHERE e.is_favorite = 1
+    WHERE e.is_favorite = 1 AND e.deleted_at IS NULL
     GROUP BY e.id ORDER BY e.updated_at DESC
   `);
   return decryptRows(rows);
@@ -375,8 +379,40 @@ export async function updateEntry(id: number, entry: Partial<Entry>, tagIds?: nu
   markVaultChanged();
 }
 
-export async function deleteEntry(id: number): Promise<void> {
+export async function getTrashedEntries(): Promise<Entry[]> {
+  const rows: any[] = await getDb().select(`
+    SELECT e.*, GROUP_CONCAT(t.name) as tag_names, GROUP_CONCAT(t.color) as tag_colors,
+           (SELECT COUNT(*) FROM attachments a WHERE a.entry_id = e.id) as attach_count,
+           f.name as folder_name
+    FROM entries e
+    LEFT JOIN entry_tags et ON e.id = et.entry_id
+    LEFT JOIN tags t ON et.tag_id = t.id
+    LEFT JOIN folders f ON e.folder_id = f.id
+    WHERE e.deleted_at IS NOT NULL
+    GROUP BY e.id ORDER BY e.deleted_at DESC
+  `);
+  return decryptRows(rows);
+}
+
+export async function moveEntryToTrash(id: number): Promise<void> {
+  await getDb().execute(
+    "UPDATE entries SET deleted_at = datetime('now', 'localtime') WHERE id = ? AND deleted_at IS NULL",
+    [id]
+  );
+  markVaultChanged();
+}
+
+export async function restoreEntry(id: number): Promise<void> {
+  await getDb().execute(
+    "UPDATE entries SET deleted_at = NULL, updated_at = datetime('now', 'localtime') WHERE id = ? AND deleted_at IS NOT NULL",
+    [id]
+  );
+  markVaultChanged();
+}
+
+export async function permanentlyDeleteEntry(id: number): Promise<void> {
   const entry = await getEntryById(id);
+  if (!entry?.deleted_at) return;
   if (entry?.icon) {
     try {
       const appData = await appDataDir();
@@ -389,12 +425,21 @@ export async function deleteEntry(id: number): Promise<void> {
       // 忽略文件删除错误
     }
   }
-  await getDb().execute('DELETE FROM entries WHERE id = ?', [id]);
+  await getDb().execute('DELETE FROM entries WHERE id = ? AND deleted_at IS NOT NULL', [id]);
   markVaultChanged();
 }
 
+export async function emptyTrash(): Promise<void> {
+  const rows: { id: number }[] = await getDb().select(
+    'SELECT id FROM entries WHERE deleted_at IS NOT NULL'
+  );
+  for (const row of rows) {
+    await permanentlyDeleteEntry(Number(row.id));
+  }
+}
+
 export async function toggleFavorite(id: number): Promise<void> {
-  await getDb().execute('UPDATE entries SET is_favorite = NOT is_favorite WHERE id = ?', [id]);
+  await getDb().execute('UPDATE entries SET is_favorite = NOT is_favorite WHERE id = ? AND deleted_at IS NULL', [id]);
   markVaultChanged();
 }
 

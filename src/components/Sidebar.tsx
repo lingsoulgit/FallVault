@@ -12,6 +12,7 @@ import { ShinyText } from '@/components/ShinyText';
 import { StrokeText } from '@/components/StrokeText';
 import { ClickSpark } from '@/components/ClickSpark';
 import { GlareHover } from '@/components/GlareHover';
+import { FAVORITES_VIEW_ID, TRASH_VIEW_ID } from '@/lib/constants';
 
 const iconMap: Record<string, React.ElementType> = {
   Folder, Inbox, Star, Lock, Gamepad2, MessageCircle, Landmark, Briefcase, Hash, Sparkles
@@ -19,7 +20,7 @@ const iconMap: Record<string, React.ElementType> = {
 
 export function Sidebar() {
   const {
-    folders, tags, entries, selectedFolderId, selectedTagId, favorites,
+    folders, tags, entries, selectedFolderId, selectedTagId, favorites, trashEntries,
     isSidebarOpen, setIsSidebarOpen, setSelectedFolderId,
     setSelectedTagId, setSearchQuery, setIsSettingsOpen,
     setIsPasswordGeneratorOpen, setIsSecurityAuditOpen, refreshAll, setConfirmDialog
@@ -149,11 +150,23 @@ export function Sidebar() {
             <Inbox size={16} />
           </button>
           <button
-            onClick={() => setSelectedFolderId(-1)}
+            onClick={() => setSelectedFolderId(FAVORITES_VIEW_ID)}
             className="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--moon-dim)] hover:text-[var(--mint)] hover:bg-[rgba(210,210,220,0.1)] transition-all"
             title="收藏夹"
           >
             <Star size={16} />
+          </button>
+          <button
+            onClick={() => setSelectedFolderId(TRASH_VIEW_ID)}
+            className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all ${selectedFolderId === TRASH_VIEW_ID ? 'text-[var(--mint)] bg-[rgba(210,210,220,0.1)]' : 'text-[var(--moon-dim)] hover:text-[var(--mint)] hover:bg-[rgba(210,210,220,0.1)]'}`}
+            title={isEn ? 'Trash' : '回收站'}
+          >
+            <Trash2 size={16} />
+            {trashEntries.length > 0 && (
+              <span className="absolute right-1 top-1 min-w-3.5 h-3.5 px-1 rounded-full text-[8px] leading-[14px] text-center font-semibold bg-[var(--danger)] text-white">
+                {trashEntries.length > 99 ? '99+' : trashEntries.length}
+              </span>
+            )}
           </button>
 
           <div className="w-6 h-px bg-[rgba(192,200,216,0.1)] mt-auto" />
@@ -223,7 +236,8 @@ export function Sidebar() {
       <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 min-h-0">
         {/* 快速入口 */}
         <SidebarItem active={selectedFolderId === null && selectedTagId === null} onClick={() => { setSelectedFolderId(null); setSelectedTagId(null); setSearchQuery(''); }} icon={<Inbox size={16} />} label="全部账号" />
-        <SidebarItem active={selectedFolderId === -1} onClick={() => setSelectedFolderId(-1)} icon={<Star size={16} />} label="收藏夹" badge={favorites.length || undefined} />
+        <SidebarItem active={selectedFolderId === FAVORITES_VIEW_ID} onClick={() => setSelectedFolderId(FAVORITES_VIEW_ID)} icon={<Star size={16} />} label={isEn ? 'Favorites' : '收藏夹'} badge={favorites.length || undefined} />
+        <SidebarItem active={selectedFolderId === TRASH_VIEW_ID} onClick={() => setSelectedFolderId(TRASH_VIEW_ID)} icon={<Trash2 size={16} />} label={isEn ? 'Trash' : '回收站'} badge={trashEntries.length || undefined} badgeColor={trashEntries.length ? '#D47070' : undefined} />
 
         {/* 分类 */}
         <div className="pt-3">
