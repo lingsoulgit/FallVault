@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS folders (
   FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
 );
 
+-- 初始化标记，避免用户删除默认数据后下次启动又被自动补回
+CREATE TABLE IF NOT EXISTS app_metadata (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 -- 标签表
 CREATE TABLE IF NOT EXISTS tags (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,12 +82,19 @@ CREATE TABLE IF NOT EXISTS password_history (
 );
 
 -- 插入默认分类
-INSERT OR IGNORE INTO folders (id, name, icon, sort_order) VALUES 
-  (1, '默认', 'Inbox', 0),
-  (2, '游戏', 'Gamepad2', 1),
-  (3, '社交', 'MessageCircle', 2),
-  (4, '银行', 'Landmark', 3),
-  (5, '工作', 'Briefcase', 4);
+INSERT OR IGNORE INTO folders (id, name, icon, sort_order)
+SELECT id, name, icon, sort_order
+FROM (
+  SELECT 1 AS id, '默认' AS name, 'Inbox' AS icon, 0 AS sort_order
+  UNION ALL SELECT 2, '游戏', 'Gamepad2', 1
+  UNION ALL SELECT 3, '社交', 'MessageCircle', 2
+  UNION ALL SELECT 4, '银行', 'Landmark', 3
+  UNION ALL SELECT 5, '工作', 'Briefcase', 4
+)
+WHERE NOT EXISTS (SELECT 1 FROM folders)
+  AND NOT EXISTS (SELECT 1 FROM app_metadata WHERE key = 'default_folders_seeded');
+
+INSERT OR IGNORE INTO app_metadata (key, value) VALUES ('default_folders_seeded', '1');
 
 -- 插入默认标签
 INSERT OR IGNORE INTO tags (id, name, color) VALUES 
@@ -165,6 +178,11 @@ export async function createTag(name: string, color: string = '#7DD3C0'): Promis
   const result = await getDb().execute('INSERT INTO tags (name, color) VALUES (?, ?)', [name, color]);
   markVaultChanged();
   return Number(result.lastInsertId);
+}
+
+export async function updateTag(id: number, name: string, color: string): Promise<void> {
+  await getDb().execute('UPDATE tags SET name = ?, color = ? WHERE id = ?', [name, color, id]);
+  markVaultChanged();
 }
 
 export async function deleteTag(id: number): Promise<void> {

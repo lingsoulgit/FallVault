@@ -1,5 +1,6 @@
 import { useAppStore } from '@/stores/appStore';
 import { AlertTriangle, X } from 'lucide-react';
+import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 
 export function ConfirmDialog() {
   const { confirmDialog, setConfirmDialog } = useAppStore();
@@ -8,7 +9,7 @@ export function ConfirmDialog() {
 
   return (
     <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmDialog({ open: false })} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onMouseDown={startWindowDragFromBackdrop} />
 
       <div
         className="relative z-10 w-full max-w-sm p-6"

@@ -5,7 +5,9 @@
 // 半自动浏览器填充：全局热键（默认 Ins）→ 把待填账号/密码粘贴进当前焦点输入框
 mod autofill;
 mod github_backup;
+mod screen_capture;
 pub use github_backup::*;
+use screen_capture::capture_screen_region;
 use autofill::{start_autofill, AutofillState, FillTarget};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -314,6 +316,7 @@ fn main() {
             github_cred_delete,
             github_save_index,
             github_load_index,
+            capture_screen_region,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

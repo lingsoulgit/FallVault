@@ -13,6 +13,7 @@ import { useToastStore } from '@/stores/toastStore';
 import { useState, useEffect } from 'react';
 import { GITHUB_BACKUP_SCHEDULE_EVENT, getDataDir, getNextGithubBackupAt } from '@/lib/backupManager';
 import { clearVaultChangeMarker, getVaultChangeMarker, markVaultChanged, setLastGithubBackupAt } from '@/lib/vaultChange';
+import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 
 export function SettingsPanel() {
   const { settings, updateSettings, setIsSettingsOpen, setIsTotpMigrationOpen } = useAppStore();
@@ -437,7 +438,7 @@ export function SettingsPanel() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsSettingsOpen(false)} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onMouseDown={startWindowDragFromBackdrop} />
 
       <div
         className="relative z-10 w-full max-w-lg max-h-[85vh] overflow-y-auto p-6"
@@ -1324,7 +1325,7 @@ export function SettingsPanel() {
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center p-6"
           style={{ background: 'rgba(8,8,16,0.6)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setGhHelp(false)}
+          onMouseDown={startWindowDragFromBackdrop}
         >
           <div
             className="rune-panel w-full max-w-md rounded-3xl p-6 max-h-[86vh] overflow-y-auto"
@@ -1381,7 +1382,7 @@ export function SettingsPanel() {
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-6"
           style={{ background: 'rgba(8,8,16,0.6)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setShowPwdModal(false)}
+          onMouseDown={startWindowDragFromBackdrop}
         >
           <div
             className="glass-card w-full max-w-sm rounded-3xl p-6"
@@ -1444,7 +1445,7 @@ export function SettingsPanel() {
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center p-6"
           style={{ background: 'rgba(8,8,16,0.6)', backdropFilter: 'blur(4px)' }}
-          onClick={() => { if (!backupBusy) setShowBackupModal(false); }}
+          onMouseDown={startWindowDragFromBackdrop}
         >
           <div
             className="glass-card w-full max-w-sm rounded-3xl p-6"

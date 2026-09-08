@@ -5,6 +5,7 @@ import { parseImportFile, importEntries, ParsedRow, ConflictMode, ImportResult }
 import { open } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '@/stores/appStore';
 import { translate, LangKey } from '@/lib/i18n';
+import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 
 interface ImportModalProps {
   onClose: () => void;
@@ -90,7 +91,7 @@ export function ImportModal({ onClose, onImported }: ImportModalProps) {
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center p-6"
       style={{ background: 'rgba(8,8,16,0.6)', backdropFilter: 'blur(4px)' }}
-      onClick={onClose}
+      onMouseDown={startWindowDragFromBackdrop}
     >
       <div
         className="glass-card w-full max-w-lg rounded-3xl p-6"

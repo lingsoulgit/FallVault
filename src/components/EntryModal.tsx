@@ -3,7 +3,7 @@ import { X, Save, Star, Eye, EyeOff, History, ImagePlus, Globe, KeyRound, Refres
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
 import { createEntry, updateEntry, getPasswordHistory, getEntryTags, getAttachments, addAttachment, deleteAttachment } from '@/lib/db';
-import { parseGoogleMigration, parseOtpAuth } from '@/lib/totp';
+import { getShareableOtpAuthUri, parseGoogleMigration, parseOtpAuth } from '@/lib/totp';
 import { encryptAttachment, decryptAttachment } from '@/lib/crypto';
 import { Paperclip, Download, Trash2 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -12,9 +12,11 @@ import { readFile } from '@tauri-apps/plugin-fs';
 import type { Entry } from '@/types';
 import { getPasswordStrength, generatePassword } from '@/lib/passwordUtils';
 import { SpecularButton } from '@/components/SpecularButton';
+import { TotpQrTools } from '@/components/TotpQrTools';
 import { getIconsDir, getAttachmentsDir, isLocalMediaPath } from '@/lib/mediaPaths';
 import { writeFileBytes, removePath, readFileBytes } from '@/lib/rustFs';
 import { BUILTIN_TEMPLATES } from '@/lib/templates';
+import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 
 export function EntryModal() {
   const { editingEntry, setEditingEntry, setIsEntryModalOpen, folders, tags, refreshAll } = useAppStore();
@@ -73,6 +75,52 @@ export function EntryModal() {
     const history = await getPasswordHistory(entryId);
     setPasswordHistory(history);
   }
+
+  const applyTotpValue = (value: string, fromScanner = false): boolean => {
+    const raw = value.trim();
+    const lower = raw.toLowerCase();
+
+    if (lower.startsWith('otpauth-migration://')) {
+      const list = parseGoogleMigration(raw);
+      if (list.length > 0) {
+        setForm((prev) => ({ ...prev, totp_secret: list[0].secret }));
+        setTotpInfo({ name: list[0].name || list[0].issuer, fromMigration: true });
+        if (list.length > 1) {
+          addToast(
+            isEn
+              ? `Imported the first entry "${list[0].name || list[0].issuer || 'Untitled'}"; import the other ${list.length - 1} from Settings → TOTP Migration`
+              : `已提取第 1 个「${list[0].name || list[0].issuer || '未命名'}」，其余 ${list.length - 1} 个可在设置→TOTP 批量导入`,
+            'info',
+          );
+        }
+        return true;
+      }
+      if (fromScanner) return false;
+    } else if (lower.startsWith('otpauth://')) {
+      if (parseOtpAuth(raw)) {
+        // 保留完整 URI 中的 algorithm/digits/period 参数，兼容非默认验证码规则。
+        setForm((prev) => ({ ...prev, totp_secret: raw }));
+        setTotpInfo({ fromMigration: false });
+        return true;
+      }
+      if (fromScanner) return false;
+    } else if (fromScanner) {
+      // 有些服务的二维码只保存 Base32 密钥；扫码时也允许直接回填这种内容。
+      const compactSecret = raw.replace(/[\s=-]/g, '').toUpperCase();
+      if (compactSecret.length < 8 || !/^[A-Z2-7]+$/.test(compactSecret)) return false;
+      setForm((prev) => ({ ...prev, totp_secret: compactSecret }));
+      setTotpInfo({ fromMigration: false });
+      return true;
+    }
+
+    setForm((prev) => ({ ...prev, totp_secret: raw }));
+    setTotpInfo(null);
+    return !fromScanner;
+  };
+
+  const getTotpShareValue = (): string => {
+    return getShareableOtpAuthUri(form.totp_secret || '', form.title?.trim() || 'FallVault');
+  };
 
   const handleUploadIcon = async () => {
     const file = await open({
@@ -314,7 +362,7 @@ export function EntryModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => { setIsEntryModalOpen(false); setEditingEntry(null); }} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onMouseDown={startWindowDragFromBackdrop} />
 
       <div className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
         style={{
@@ -569,36 +617,15 @@ export function EntryModal() {
             </label>
             <input
               value={form.totp_secret || ''}
-              onChange={e => {
-                const raw = e.target.value.trim();
-                // 智能识别：Google 批量迁移链接 → 取第一个条目的 secret；otpauth:// → 提取 secret；否则按明文密钥
-                if (raw.startsWith('otpauth-migration://')) {
-                  const list = parseGoogleMigration(raw);
-                  if (list.length > 0) {
-                    setForm({ ...form, totp_secret: list[0].secret });
-                    setTotpInfo({ name: list[0].name || list[0].issuer, fromMigration: true });
-                    if (list.length > 1) addToast(`已提取第 1 个「${list[0].name || list[0].issuer || '未命名'}」，其余 ${list.length - 1} 个可在设置→TOTP 批量导入`, 'info');
-                  } else {
-                    setForm({ ...form, totp_secret: raw });
-                    setTotpInfo(null);
-                  }
-                } else if (raw.startsWith('otpauth://')) {
-                  const s = parseOtpAuth(raw);
-                  if (s) {
-                    // 存入完整 otpauth:// URI（保留 algorithm/digits/period 参数，避免 SHA256/8位 等算出无效码）
-                    setForm({ ...form, totp_secret: raw });
-                    setTotpInfo({ fromMigration: false });
-                  } else {
-                    setForm({ ...form, totp_secret: raw });
-                    setTotpInfo(null);
-                  }
-                } else {
-                  setForm({ ...form, totp_secret: raw });
-                  setTotpInfo(null);
-                }
-              }}
+              onChange={e => applyTotpValue(e.target.value)}
               placeholder="粘贴 TOTP 密钥 / otpauth:// URI / 谷歌验证器迁移链接"
               className="rune-input w-full px-3 py-2.5 text-sm font-mono"
+            />
+            <TotpQrTools
+              isEn={isEn}
+              onDetected={(value) => applyTotpValue(value, true)}
+              shareValue={getTotpShareValue()}
+              shareLabel={form.title?.trim() || 'FallVault'}
             />
             {form.totp_secret && (
               <p className="text-[11px] text-[var(--mint)] mt-1.5 flex items-center gap-1">

@@ -7,6 +7,7 @@ import { buildOtpAuthUri, parseOtpAuth, parseGoogleMigration } from '@/lib/totp'
 import { translate } from '@/lib/i18n';
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
+import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 
 export function TotpMigrationModal() {
   const { setIsTotpMigrationOpen, settings, refreshAll } = useAppStore();
@@ -103,7 +104,7 @@ export function TotpMigrationModal() {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={close} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onMouseDown={startWindowDragFromBackdrop} />
       <div className="relative rune-panel w-full max-w-xl max-h-[85vh] overflow-y-auto p-6 rounded-2xl">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-xl font-bold text-[var(--moon)]">{isEn ? 'TOTP Migration' : 'TOTP 迁移'}</h2>

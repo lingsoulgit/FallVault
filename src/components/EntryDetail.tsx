@@ -5,10 +5,12 @@ import { useToastStore } from '@/stores/toastStore';
 import { toggleFavorite, moveEntryToTrash } from '@/lib/db';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { getTotpWithRemaining } from '@/lib/totp';
+import { getShareableOtpAuthUri, getTotpPeriod, getTotpWithRemaining } from '@/lib/totp';
 import type { Entry } from '@/types';
 import { setFillTarget } from '@/lib/autofill';
 import { openExternalWebsite } from '@/lib/openExternal';
+import { TotpQrTools } from '@/components/TotpQrTools';
+import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 
 function getFaviconUrl(website: string): string | null {
   if (!website) return null;
@@ -34,7 +36,7 @@ export function EntryDetail() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-  const [totp, setTotp] = useState<{ code: string; remaining: number } | null>(null);
+  const [totp, setTotp] = useState<{ code: string; remaining: number; period: number } | null>(null);
 
   // 打开时重置显示状态
   useEffect(() => {
@@ -44,18 +46,24 @@ export function EntryDetail() {
     }
   }, [isDetailOpen, selectedEntryId]);
 
-  // TOTP 刷新：每秒按真实时间计算剩余秒数，整 30 秒边界自动换新码
+  // TOTP 刷新：每秒按真实时间计算剩余秒数，并尊重 URI 中的自定义周期。
   useEffect(() => {
-    if (!isDetailOpen || !entry?.totp_secret) return;
+    if (!isDetailOpen || !entry?.totp_secret) {
+      setTotp(null);
+      return;
+    }
     let cancelled = false;
-    let lastPeriod = -1;
+    let lastCounter = -1;
+    const periodSeconds = getTotpPeriod(entry.totp_secret);
     const tick = () => {
       const now = Math.floor(Date.now() / 1000);
-      const period = Math.floor(now / 30);
-      const remaining = 30 - (now % 30);
-      if (period !== lastPeriod) {
-        lastPeriod = period;
-        getTotpWithRemaining(entry.totp_secret!).then((v) => { if (!cancelled) setTotp(v); }).catch(() => {});
+      const counter = Math.floor(now / periodSeconds);
+      const remaining = periodSeconds - (now % periodSeconds);
+      if (counter !== lastCounter) {
+        lastCounter = counter;
+        getTotpWithRemaining(entry.totp_secret!).then((v) => {
+          if (!cancelled) setTotp({ ...v, period: periodSeconds });
+        }).catch(() => {});
       } else if (!cancelled) {
         setTotp((p) => (p ? { ...p, remaining } : p));
       }
@@ -139,7 +147,7 @@ export function EntryDetail() {
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(8,8,16,0.66)', backdropFilter: 'blur(6px)' }}
-      onClick={() => setDetailOpen(false)}
+      onMouseDown={startWindowDragFromBackdrop}
     >
       <div
         className="rune-panel relative w-full max-w-[560px] max-h-[88vh] overflow-y-auto p-6"
@@ -208,8 +216,17 @@ export function EntryDetail() {
             <code className="flex-1 text-base font-mono tracking-[0.3em]" style={{ color: 'var(--mint)' }}>{totp.code}</code>
             <div className="relative w-10 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(192,200,216,0.15)' }}>
               <div className="absolute left-0 top-0 bottom-0 rounded-full transition-all duration-1000 ease-linear"
-                style={{ width: `${(totp.remaining / 30) * 100}%`, background: totp.remaining <= 5 ? 'var(--danger,#D47070)' : 'var(--mint)' }} />
+                style={{ width: `${Math.min(100, (totp.remaining / totp.period) * 100)}%`, background: totp.remaining <= 5 ? 'var(--danger,#D47070)' : 'var(--mint)' }} />
             </div>
+            <span className="w-7 text-right text-[11px] font-mono" style={{ color: totp.remaining <= 5 ? 'var(--danger,#D47070)' : 'var(--moon-dim)' }}>
+              {totp.remaining}s
+            </span>
+            <TotpQrTools
+              isEn={isEn}
+              shareOnly
+              shareValue={getShareableOtpAuthUri(entry.totp_secret, entry.title || 'FallVault')}
+              shareLabel={entry.title || 'FallVault'}
+            />
             <button onClick={() => handleCopy(totp.code, 'totp')} className="text-[var(--moon-dim)] hover:text-[var(--mint)] p-1" title={isEn ? 'Copy code' : '复制验证码'}>
               <Copy size={14} />
             </button>

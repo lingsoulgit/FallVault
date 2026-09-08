@@ -5,6 +5,7 @@ import { useToastStore } from '@/stores/toastStore';
 import { runSecurityAudit } from '@/lib/securityAudit';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { getPasswordStrength } from '@/lib/passwordUtils';
+import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 
 export function SecurityAuditModal() {
   const { entries, setIsSecurityAuditOpen, setEditingEntry, setIsEntryModalOpen, refreshAll } = useAppStore();
@@ -38,7 +39,7 @@ export function SecurityAuditModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsSecurityAuditOpen(false)} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onMouseDown={startWindowDragFromBackdrop} />
 
       <div className="relative z-10 w-full max-w-2xl max-h-[88vh] overflow-y-auto p-6"
         style={{

@@ -5,6 +5,7 @@ import { useToastStore } from '@/stores/toastStore';
 import { generatePassword, getPasswordStrength } from '@/lib/passwordUtils';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { translate, LangKey } from '@/lib/i18n';
+import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 
 const strengthColors = ['#D47070', '#D4B070', '#9B8DB5', '#7DB8D3', '#7DD3C0'];
 const strengthLabels = ['极弱', '弱', '一般', '强', '极强'];
@@ -55,7 +56,7 @@ export function PasswordGenerator() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsPasswordGeneratorOpen(false)} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onMouseDown={startWindowDragFromBackdrop} />
 
       <div
         className="relative z-10 w-full max-w-md p-6"

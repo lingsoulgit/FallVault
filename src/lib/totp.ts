@@ -21,7 +21,8 @@ function parseTotpParams(secretOrUri: string): { secret: string; algo: Algo; dig
       const algoParam = (u.searchParams.get('algorithm') || 'SHA1').toUpperCase().replace('SHA', 'SHA-');
       const algo: Algo = algoParam === 'SHA-256' ? 'SHA-256' : algoParam === 'SHA-512' ? 'SHA-512' : 'SHA-1';
       const digits = parseInt(u.searchParams.get('digits') || '6', 10) || 6;
-      const period = parseInt(u.searchParams.get('period') || '30', 10) || 30;
+      const parsedPeriod = parseInt(u.searchParams.get('period') || '30', 10);
+      const period = Number.isFinite(parsedPeriod) && parsedPeriod > 0 ? parsedPeriod : 30;
       return { secret: secret.trim(), algo, digits, period };
     } catch { /* 解析失败回落到明文 */ }
   }
@@ -47,7 +48,7 @@ export function base32Decode(input: string): Uint8Array {
 
 // 从 otpauth:// URI 提取 secret（兼容二维码扫码结果）
 export function parseOtpAuth(uri: string): string | null {
-  if (!uri || !uri.startsWith('otpauth://')) return null;
+  if (!uri || !uri.toLowerCase().startsWith('otpauth://')) return null;
   try {
     const u = new URL(uri);
     const secret = u.searchParams.get('secret');
@@ -63,6 +64,25 @@ export function buildOtpAuthUri(secret: string, label: string, issuer?: string):
   const enc = (s: string) => encodeURIComponent(s);
   const base = `otpauth://totp/${enc(label || 'FallVault')}?secret=${enc(clean)}&period=30&digits=6&algorithm=SHA1`;
   return issuer ? `${base}&issuer=${enc(issuer)}` : base;
+}
+
+// 把已保存的完整 URI 或 Base32 密钥规范化为可供验证器扫描的 URI。
+export function getShareableOtpAuthUri(secretOrUri: string, label: string): string {
+  const raw = (secretOrUri || '').trim();
+  if (!raw) return '';
+
+  if (raw.toLowerCase().startsWith('otpauth://')) {
+    const secret = parseOtpAuth(raw)?.replace(/[\s=-]/g, '').toUpperCase() || '';
+    return secret.length >= 8 && /^[A-Z2-7]+$/.test(secret) ? raw : '';
+  }
+
+  const compactSecret = raw.replace(/[\s=-]/g, '').toUpperCase();
+  if (compactSecret.length < 8 || !/^[A-Z2-7]+$/.test(compactSecret)) return '';
+  return buildOtpAuthUri(compactSecret, label || 'FallVault');
+}
+
+export function getTotpPeriod(secretOrUri: string): number {
+  return parseTotpParams(secretOrUri).period;
 }
 
 // ---- Google Authenticator 批量迁移格式解析（otpauth-migration://offline?data=BASE64PROTOBUF） ----

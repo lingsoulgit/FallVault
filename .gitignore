@@ -58,3 +58,6 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# CodeGraph local index
+/.codegraph/
