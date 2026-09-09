@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Lock, Star, ExternalLink, Copy, Eye, EyeOff, Edit2, Trash2, Paperclip } from 'lucide-react';
+import { Lock, Star, ExternalLink, Copy, Eye, EyeOff, Edit2, Trash2, Paperclip, Folder } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
 import { toggleFavorite, moveEntryToTrash } from '@/lib/db';
@@ -133,6 +133,7 @@ export function EntryCard({ entry, index = 0 }: { entry: Entry; index?: number }
     }
   };
 
+  const folderName = entry.folder_name || (isEn ? 'Uncategorized' : '未分类');
   const tagNames = entry.tag_names ? entry.tag_names.split(',') : [];
   const tagColors = entry.tag_colors ? entry.tag_colors.split(',') : [];
   const customFieldCount = entry.customFields?.length || 0;
@@ -258,6 +259,14 @@ export function EntryCard({ entry, index = 0 }: { entry: Entry; index?: number }
                     {customFieldCount} 个字段
                   </span>
                 )}
+
+                <span
+                  className="flex max-w-[96px] shrink-0 items-center gap-1 rounded border border-[rgba(192,200,216,0.15)] bg-[rgba(192,200,216,0.06)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--moon-dim)]"
+                  title={`${isEn ? 'Category' : '分类'}：${folderName}`}
+                >
+                  <Folder size={10} className="shrink-0" aria-hidden="true" />
+                  <span className="truncate">{folderName}</span>
+                </span>
 
                 {tagNames.length > 0 && (
                   <div className="flex min-w-0 items-center gap-1 overflow-hidden">

@@ -288,10 +288,12 @@ export function filterEntriesByQuery(entries: Entry[], rawQuery: string): Entry[
 
 export async function getFavorites(): Promise<Entry[]> {
   const rows: any[] = await getDb().select(`    SELECT e.*, GROUP_CONCAT(t.name) as tag_names, GROUP_CONCAT(t.color) as tag_colors,
-           (SELECT COUNT(*) FROM attachments a WHERE a.entry_id = e.id) as attach_count
+           (SELECT COUNT(*) FROM attachments a WHERE a.entry_id = e.id) as attach_count,
+           f.name as folder_name
     FROM entries e
     LEFT JOIN entry_tags et ON e.id = et.entry_id
     LEFT JOIN tags t ON et.tag_id = t.id
+    LEFT JOIN folders f ON e.folder_id = f.id
     WHERE e.is_favorite = 1 AND e.deleted_at IS NULL
     GROUP BY e.id ORDER BY e.updated_at DESC
   `);

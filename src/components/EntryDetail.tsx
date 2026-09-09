@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Lock, Star, ExternalLink, Copy, Eye, EyeOff, Edit2, Trash2, Paperclip, X, Wand2 } from 'lucide-react';
+import { Lock, Star, ExternalLink, Copy, Eye, EyeOff, Edit2, Trash2, Paperclip, X, Wand2, Folder } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
 import { toggleFavorite, moveEntryToTrash } from '@/lib/db';
@@ -140,6 +140,7 @@ export function EntryDetail() {
     }
   };
 
+  const folderName = entry.folder_name || (isEn ? 'Uncategorized' : '未分类');
   const tagNames = entry.tag_names ? entry.tag_names.split(',') : [];
   const tagColors = entry.tag_colors ? entry.tag_colors.split(',') : [];
 
@@ -254,17 +255,22 @@ export function EntryDetail() {
           </div>
         )}
 
-        {/* 标签 */}
-        {tagNames.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-4">
-            {tagNames.map((name: string, i: number) => (
-              <span key={i} className="text-[11px] px-2.5 py-1 rounded-full font-medium"
-                style={{ backgroundColor: `${tagColors[i]}18`, color: tagColors[i] || 'var(--moon-dim)', border: `1px solid ${tagColors[i] ? `${tagColors[i]}25` : 'rgba(192,200,216,0.1)'}` }}>
-                {name}
-              </span>
-            ))}
-          </div>
-        )}
+        {/* 分类和标签 */}
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+          <span
+            className="flex max-w-full items-center gap-1.5 rounded border border-[rgba(192,200,216,0.15)] bg-[rgba(192,200,216,0.06)] px-2.5 py-1 text-[11px] font-medium text-[var(--moon-dim)]"
+            title={`${isEn ? 'Category' : '分类'}：${folderName}`}
+          >
+            <Folder size={12} className="shrink-0" aria-hidden="true" />
+            <span className="min-w-0 break-all">{folderName}</span>
+          </span>
+          {tagNames.map((name: string, i: number) => (
+            <span key={i} className="text-[11px] px-2.5 py-1 rounded-full font-medium"
+              style={{ backgroundColor: `${tagColors[i]}18`, color: tagColors[i] || 'var(--moon-dim)', border: `1px solid ${tagColors[i] ? `${tagColors[i]}25` : 'rgba(192,200,216,0.1)'}` }}>
+              {name}
+            </span>
+          ))}
+        </div>
 
         {/* 附件 */}
         {Number(entry.attach_count) > 0 && (
