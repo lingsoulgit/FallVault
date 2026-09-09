@@ -6,12 +6,14 @@
 mod autofill;
 mod github_backup;
 mod screen_capture;
+mod website_metadata;
+use autofill::{start_autofill, AutofillState, FillTarget};
 pub use github_backup::*;
 use screen_capture::capture_screen_region;
-use autofill::{start_autofill, AutofillState, FillTarget};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Instant;
+use website_metadata::fetch_website_title;
 
 use std::process::Command;
 use tauri::{
@@ -317,6 +319,7 @@ fn main() {
             github_save_index,
             github_load_index,
             capture_screen_region,
+            fetch_website_title,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

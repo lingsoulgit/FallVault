@@ -7,7 +7,7 @@ import { getShareableOtpAuthUri, parseGoogleMigration, parseOtpAuth } from '@/li
 import { encryptAttachment, decryptAttachment } from '@/lib/crypto';
 import { Paperclip, Download, Trash2 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { readFile } from '@tauri-apps/plugin-fs';
 import type { Entry } from '@/types';
 import { getPasswordStrength, generatePassword } from '@/lib/passwordUtils';
@@ -156,10 +156,25 @@ export function EntryModal() {
     if (!form.website?.trim()) return;
     setFaviconBusy(true);
     try {
-      let url = form.website.trim();
-      if (!url.startsWith('http')) url = `https://${url}`;
+      const requestedWebsite = form.website.trim();
+      let url = requestedWebsite;
+      if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
       const domain = new URL(url).hostname;
       const cleanDomain = domain.replace(/^www\./, '');
+
+      // 新增账号且标题仍为空时，与图标请求同时获取网页标题。
+      // 回填前再次核对标题和 URL，避免慢请求覆盖用户随后输入的内容。
+      if (!isEditing && !form.title?.trim()) {
+        void invoke<string | null>('fetch_website_title', { url })
+          .then((title) => {
+            if (!title) return;
+            setForm((prev) => {
+              if (prev.title?.trim() || prev.website?.trim() !== requestedWebsite) return prev;
+              return { ...prev, title };
+            });
+          })
+          .catch((error) => console.warn('Website title fetch failed:', error));
+      }
 
       // 多来源并行测试（img 预加载，不受 CORS 限制，3秒超时）
       const sources = [
