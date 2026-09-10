@@ -59,6 +59,12 @@ export interface CustomField {
   hidden?: boolean; // 是否作为密码隐藏显示
 }
 
+export interface SecurityAuditChecks {
+  weak: boolean;
+  reused: boolean;
+  breached: boolean;
+}
+
 export interface AppSettings {
   language: 'zh' | 'en';
   theme: 'default' | 'sakura' | 'azure';
@@ -72,6 +78,7 @@ export interface AppSettings {
     darkOverlay: number;
   };
   clipboardClearSeconds: number;
+  securityAudit: SecurityAuditChecks;
   autoBackupEnabled: boolean;
   autoBackupMax: number;
   autoBackupIntervalMin: number;

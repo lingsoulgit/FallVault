@@ -1,19 +1,25 @@
 import { useState, useMemo } from 'react';
-import { X, ShieldAlert, ShieldCheck, Copy, AlertTriangle, Eye } from 'lucide-react';
+import { X, Shield, ShieldAlert, ShieldCheck, Copy, AlertTriangle, Eye } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
-import { runSecurityAudit } from '@/lib/securityAudit';
+import { runSecurityAudit, type AuditResult } from '@/lib/securityAudit';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
-import { getPasswordStrength } from '@/lib/passwordUtils';
 import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 
 export function SecurityAuditModal() {
-  const { entries, setIsSecurityAuditOpen, setEditingEntry, setIsEntryModalOpen, refreshAll } = useAppStore();
+  const { entries, setIsSecurityAuditOpen, setEditingEntry, setIsEntryModalOpen, updateSettings } = useAppStore();
   const { addToast } = useToastStore();
   const [showPwd, setShowPwd] = useState<number | null>(null);
 
-  const audit = useMemo(() => runSecurityAudit(entries), [entries]);
+  const auditChecks = useAppStore((s) => s.settings.securityAudit);
+  const hasEnabledChecks = auditChecks.weak || auditChecks.reused || auditChecks.breached;
+  const audit = useMemo(() => runSecurityAudit(entries, auditChecks), [entries, auditChecks]);
   const isEn = useAppStore((s) => s.settings.language === 'en');
+  const checkOptions = [
+    { key: 'weak', label: isEn ? 'Weak passwords' : '弱密码' },
+    { key: 'reused', label: isEn ? 'Reused passwords' : '重复密码' },
+    { key: 'breached', label: isEn ? 'Breached passwords' : '泄露密码' },
+  ] as const;
 
   const handleCopy = async (text: string) => {
     await writeText(text);
@@ -28,14 +34,6 @@ export function SecurityAuditModal() {
       setIsSecurityAuditOpen(false);
     }
   };
-
-  const strengthLabel = (score: number) => {
-    const map = isEn
-      ? ['Very weak', 'Weak', 'Fair', 'Strong', 'Very strong']
-      : ['极弱', '弱', '一般', '强', '极强'];
-    return map[score] || map[0];
-  };
-  const strengthColor = ['#D47070', '#D47070', '#D4B070', '#7DB8D3', '#7DD3C0'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -52,30 +50,59 @@ export function SecurityAuditModal() {
 
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${audit.issuesCount > 0 ? 'bg-[rgba(212,112,112,0.15)]' : 'bg-[rgba(125,211,192,0.15)]'}`}>
-              {audit.issuesCount > 0
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${!hasEnabledChecks ? 'bg-[rgba(192,200,216,0.08)]' : audit.issuesCount > 0 ? 'bg-[rgba(212,112,112,0.15)]' : 'bg-[rgba(125,211,192,0.15)]'}`}>
+              {!hasEnabledChecks
+                ? <Shield size={20} style={{ color: 'var(--moon-faint)' }} />
+                : audit.issuesCount > 0
                 ? <ShieldAlert size={20} style={{ color: '#D47070' }} />
                 : <ShieldCheck size={20} style={{ color: 'var(--mint)' }} />}
             </div>
             <div>
               <h2 className="text-xl font-bold text-[var(--moon)]">{isEn ? 'Security Audit' : '安全审计'}</h2>
               <p className="text-xs text-[var(--moon-faint)] mt-0.5">
-                {isEn
-                  ? `Checked ${audit.total} accounts · ${audit.issuesCount} need attention`
-                  : `已检查 ${audit.total} 个账号 · ${audit.issuesCount} 个需要关注`}
+                {!hasEnabledChecks
+                  ? (isEn ? 'No checks enabled' : '未启用检查')
+                  : (isEn
+                    ? `Checked ${audit.total} accounts · ${audit.issuesCount} need attention`
+                    : `已检查 ${audit.total} 个账号 · ${audit.issuesCount} 个需要关注`)}
               </p>
             </div>
           </div>
-          <button onClick={() => setIsSecurityAuditOpen(false)}
+          <button onClick={() => setIsSecurityAuditOpen(false)} aria-label={isEn ? 'Close' : '关闭'}
             className="text-[var(--moon-faint)] hover:text-[var(--moon)] transition-colors p-1 rounded-lg hover:bg-[rgba(192,200,216,0.08)]">
             <X size={22} />
           </button>
         </div>
 
-        {audit.issuesCount === 0 ? (
+        <fieldset className="mb-5">
+          <legend className="text-sm font-semibold text-[var(--moon)] mb-2">{isEn ? 'Checks' : '检查项目'}</legend>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {checkOptions.map(({ key, label }) => (
+              <label key={key} className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${auditChecks[key] ? 'border-[var(--mint)] bg-[rgba(125,211,192,0.08)] text-[var(--moon)]' : 'border-[var(--glass-border)] bg-[rgba(192,200,216,0.04)] text-[var(--moon-faint)]'}`}>
+                <input type="checkbox" checked={auditChecks[key]}
+                  onChange={(event) => {
+                    setShowPwd(null);
+                    updateSettings({ securityAudit: { ...auditChecks, [key]: event.target.checked } });
+                  }}
+                  className="w-4 h-4 shrink-0 accent-[var(--mint)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mint)]" />
+                <span className="text-sm">{label}</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-xs text-[var(--moon-faint)] mt-2">
+            {isEn ? 'Only selected checks run. Changes apply immediately and are saved.' : '仅执行勾选的检查，修改后立即生效并自动保存。'}
+          </p>
+        </fieldset>
+
+        {!hasEnabledChecks ? (
+          <div className="py-10 text-center">
+            <Shield size={48} style={{ color: 'var(--moon-faint)' }} className="mx-auto mb-3" />
+            <p className="text-[var(--moon-dim)]">{isEn ? 'Select at least one check to start the audit.' : '请至少勾选一项以开始安全审计。'}</p>
+          </div>
+        ) : audit.issuesCount === 0 ? (
           <div className="py-10 text-center">
             <ShieldCheck size={48} style={{ color: 'var(--mint)' }} className="mx-auto mb-3" />
-            <p className="text-[var(--moon-dim)]">{isEn ? 'All good! No weak, reused or breached passwords found.' : '全部安全！未发现弱密码、重复密码或泄露密码。'}</p>
+            <p className="text-[var(--moon-dim)]">{isEn ? 'No issues found in the selected checks.' : '已勾选的检查项目中未发现问题。'}</p>
           </div>
         ) : (
           <div className="space-y-5">
@@ -120,8 +147,8 @@ function Section({ icon, color, title, desc, children }: { icon: React.ReactNode
   );
 }
 
-function Row({ entry, reasons, showPwd, onToggle, onCopy, onOpen, isEn }: {
-  entry: any; reasons: { breached: boolean; weak: boolean; reused: boolean; score: number }; showPwd: boolean;
+function Row({ entry, reasons, showPwd, onToggle, onCopy, onOpen, isEn }: AuditResult['deduped'][number] & {
+  showPwd: boolean;
   onToggle: () => void; onCopy: () => void; onOpen: () => void; isEn: boolean;
 }) {
   const cats: { label: string; color: string }[] = [];

@@ -1,4 +1,4 @@
-import type { Entry } from '@/types';
+import type { Entry, SecurityAuditChecks } from '@/types';
 import { getPasswordStrength } from './passwordUtils';
 
 // 离线泄露密码库（Top 常见弱密码，本地比对，不上传任何数据）
@@ -47,7 +47,7 @@ export interface AuditResult {
   breached: Entry[];                              // 命中离线泄露库
   issuesCount: number;
   // 每个账号只列一次（问题最严重的优先）：标识该账号属于哪些类别
-  deduped: { entry: Entry; reasons: { breached: boolean; weak: boolean; reused: boolean; score: number } }[];
+  deduped: { entry: Entry; reasons: { breached: boolean; weak: boolean; reused: boolean; score: number | null } }[];
 }
 
 // 计算密码强度（复用 zxcvbn，返回 0-4）
@@ -60,34 +60,39 @@ function strengthScore(pwd: string): number {
   }
 }
 
-export function runSecurityAudit(entries: Entry[]): AuditResult {
+export function runSecurityAudit(entries: Entry[], checks: SecurityAuditChecks): AuditResult {
+  if (!checks.weak && !checks.reused && !checks.breached) {
+    return { total: 0, weak: [], reused: [], breached: [], issuesCount: 0, deduped: [] };
+  }
+
   const withPwd = entries.filter((e) => e.password && e.password.length > 0);
 
   // 弱密码：score <= 1
   const weak: { entry: Entry; score: number }[] = [];
   // 泄露命中
   const breached: Entry[] = [];
-
-  for (const e of withPwd) {
-    const score = strengthScore(e.password);
-    if (score <= 1) weak.push({ entry: e, score });
-    if (BREACHED_PASSWORDS.has(e.password.toLowerCase())) breached.push(e);
-  }
-
-  // 重复密码：按明文密码分组（同密码 = 复用风险）
+  const scores = new Map<number, number>();
   const byPwd = new Map<string, Entry[]>();
+
   for (const e of withPwd) {
-    const arr = byPwd.get(e.password) || [];
-    arr.push(e);
-    byPwd.set(e.password, arr);
+    if (checks.weak) {
+      const score = strengthScore(e.password);
+      scores.set(e.id, score);
+      if (score <= 1) weak.push({ entry: e, score });
+    }
+    if (checks.breached && BREACHED_PASSWORDS.has(e.password.toLowerCase())) breached.push(e);
+    // 只在启用重复密码检查时按明文密码分组。
+    if (checks.reused) {
+      const arr = byPwd.get(e.password) || [];
+      arr.push(e);
+      byPwd.set(e.password, arr);
+    }
   }
+
   const reused = [...byPwd.values()].filter((g) => g.length >= 2);
 
-  const reusedIds = new Set<number>();
-  reused.forEach((g) => g.forEach((e) => reusedIds.add(e.id)));
-
   // 去重：每个账号只出现一次，汇总它命中了哪些类别
-  const byId = new Map<number, { entry: Entry; reasons: { breached: boolean; weak: boolean; reused: boolean; score: number } }>();
+  const byId = new Map<number, AuditResult['deduped'][number]>();
   for (const w of weak) {
     const cur = byId.get(w.entry.id) || { entry: w.entry, reasons: { breached: false, weak: false, reused: false, score: w.score } };
     cur.reasons.weak = true;
@@ -95,13 +100,13 @@ export function runSecurityAudit(entries: Entry[]): AuditResult {
     byId.set(w.entry.id, cur);
   }
   for (const b of breached) {
-    const cur = byId.get(b.id) || { entry: b, reasons: { breached: false, weak: false, reused: false, score: strengthScore(b.password) } };
+    const cur = byId.get(b.id) || { entry: b, reasons: { breached: false, weak: false, reused: false, score: scores.get(b.id) ?? null } };
     cur.reasons.breached = true;
     byId.set(b.id, cur);
   }
   for (const g of reused) {
     for (const e of g) {
-      const cur = byId.get(e.id) || { entry: e, reasons: { breached: false, weak: false, reused: false, score: strengthScore(e.password) } };
+      const cur = byId.get(e.id) || { entry: e, reasons: { breached: false, weak: false, reused: false, score: scores.get(e.id) ?? null } };
       cur.reasons.reused = true;
       byId.set(e.id, cur);
     }

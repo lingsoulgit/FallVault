@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import {
   Folder, Inbox, Star, Hash, ChevronRight, ChevronLeft,
   Plus, Settings, Lock, Gamepad2, MessageCircle, Landmark,
@@ -84,10 +84,11 @@ export function Sidebar() {
   const { addToast } = useToastStore();
 
   const isEn = useAppStore((s) => s.settings.language === 'en');
+  const auditChecks = useAppStore((s) => s.settings.securityAudit);
 
-  const auditIssues = (() => {
-    try { return runSecurityAudit(entries).issuesCount; } catch { return 0; }
-  })();
+  const auditIssues = useMemo(() => {
+    try { return runSecurityAudit(entries, auditChecks).issuesCount; } catch { return 0; }
+  }, [entries, auditChecks]);
 
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderIcon, setNewFolderIcon] = useState('Folder');

@@ -78,6 +78,7 @@ const defaultSettings: AppSettings = {
     darkOverlay: 0.45,
   },
   clipboardClearSeconds: 30,
+  securityAudit: { weak: true, reused: true, breached: true },
   autoBackupEnabled: true,
   autoBackupMax: 5,
   autoBackupIntervalMin: 60,
@@ -108,6 +109,7 @@ function loadSettings(): AppSettings {
         ...defaultSettings,
         ...saved,
         background: { ...defaultSettings.background, ...(saved.background || {}) },
+        securityAudit: { ...defaultSettings.securityAudit, ...(saved.securityAudit || {}) },
         githubAutoBackup: { ...defaultSettings.githubAutoBackup, ...(saved.githubAutoBackup || {}) },
       };
       // 迁移旧版 1 分钟测试档及 48/96 小时档位到新的正式间隔。
@@ -196,11 +198,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       const glassAlpha = 0.12 + ((alpha - 0.2) / 0.75) * 0.6;
       root.style.setProperty('--glass-alpha', Math.min(0.75, Math.max(0.1, glassAlpha)).toFixed(2));
     }
-    // 持久化到 localStorage（节流：拖动时最多每秒写 2 次）
+    // 持久化到 localStorage（拖动时节流；审计勾选立即保存，避免快速切换丢失）
     try {
       const now = Date.now();
       const last = get().__lastPersist ?? 0;
-      if (now - last > 500) {
+      if (partial.securityAudit !== undefined || now - last > 500) {
         localStorage.setItem('fallvault-settings', JSON.stringify(next));
         set({ settings: next, __lastPersist: now });
       } else {
