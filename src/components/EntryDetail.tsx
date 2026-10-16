@@ -87,6 +87,7 @@ export function EntryDetail() {
     addToast(
       field === 'password' ? (isEn ? 'Password copied' : '密码已复制')
         : field === 'totp' ? (isEn ? 'Code copied' : '验证码已复制')
+          : field === 'website' ? (isEn ? 'Website copied' : '网站已复制')
           : (isEn ? 'Username copied' : '账号已复制'), 'success');
     if (field === 'username' || field === 'password') {
       setFillTarget({ username: entry.username || '', password: entry.password || '' });
@@ -177,15 +178,26 @@ export function EntryDetail() {
           <div className="min-w-0 flex-1">
             <h2 className="font-bold text-[var(--moon)] text-lg leading-tight truncate">{entry.title}</h2>
             {entry.website && (
-              <button
-                type="button"
-                onClick={handleOpenWebsite}
-                className="mt-1 flex max-w-full items-center gap-1 text-[12px] font-medium text-[var(--moon-dim)] transition-colors hover:text-[var(--mint)]"
-                title={isEn ? 'Open website in browser' : '在浏览器中打开网站'}
-              >
-                <span className="truncate">{entry.website}</span>
-                <ExternalLink size={10} className="shrink-0" />
-              </button>
+              <div className="group mt-1 flex min-w-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={handleOpenWebsite}
+                  className="flex min-w-0 items-center gap-1 text-[12px] font-medium text-[var(--moon-dim)] transition-colors hover:text-[var(--mint)]"
+                  title={isEn ? 'Open website in browser' : '在浏览器中打开网站'}
+                >
+                  <span className="truncate">{entry.website}</span>
+                  <ExternalLink size={10} className="shrink-0" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(entry.website, 'website')}
+                  className={`shrink-0 rounded p-1 transition-all ${copied === 'website' ? 'opacity-100 text-[var(--mint)]' : 'opacity-0 text-[var(--moon-dim)] group-hover:opacity-100 hover:text-[var(--mint)]'}`}
+                  title={isEn ? 'Copy website' : '复制网站'}
+                  aria-label={isEn ? 'Copy website' : '复制网站'}
+                >
+                  <Copy size={11} />
+                </button>
+              </div>
             )}
           </div>
           <button onClick={handleToggleFavorite}
@@ -311,7 +323,7 @@ function FieldRow({ label, value, revealed, onToggleReveal, showCopy, copied, on
       <code className="flex-1 text-[14px] text-[var(--moon)] truncate font-mono font-semibold break-all">{revealed ? value : '•'.repeat(Math.min((value?.length || 8), 24))}</code>
       <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
         {onToggleReveal && (
-          <button onClick={onToggleReveal} className="text-[var(--moon-faint)] hover:text-[var(--moon)] p-1">
+          <button onClick={onToggleReveal} className="text-[var(--moon-dim)] hover:text-[var(--moon)] p-1">
             {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>
         )}

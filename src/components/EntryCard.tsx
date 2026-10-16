@@ -78,6 +78,7 @@ export function EntryCard({ entry, index = 0 }: { entry: Entry; index?: number }
     addToast(
       field === 'password' ? (isEn ? 'Password copied' : '密码已复制')
       : field === 'totp' ? (isEn ? 'Code copied' : '验证码已复制')
+      : field === 'website' ? (isEn ? 'Website copied' : '网站已复制')
       : (isEn ? 'Username copied' : '账号已复制'), 'success'
     );
     // 复制账号或密码时，把该条目设为半自动填充的待填目标
@@ -177,15 +178,26 @@ export function EntryCard({ entry, index = 0 }: { entry: Entry; index?: number }
               <div className="min-w-0 flex-1">
                 <h3 className="font-semibold text-[var(--moon)] truncate text-[14px] leading-tight">{entry.title}</h3>
                 {entry.website && (
-                  <button
-                    type="button"
-                    className="mt-0.5 flex max-w-full items-center gap-1 text-[11px] font-medium text-[var(--moon-dim)] transition-colors hover:text-[var(--mint)]"
-                    onClick={handleOpenWebsite}
-                    title={isEn ? 'Open website in browser' : '在浏览器中打开网站'}
-                  >
-                    <span className="truncate">{entry.website}</span>
-                    <ExternalLink size={9} className="shrink-0" />
-                  </button>
+                  <div className="group mt-0.5 flex min-w-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      className="flex min-w-0 items-center gap-1 text-[11px] font-medium text-[var(--moon-dim)] transition-colors hover:text-[var(--mint)]"
+                      onClick={handleOpenWebsite}
+                      title={isEn ? 'Open website in browser' : '在浏览器中打开网站'}
+                    >
+                      <span className="truncate">{entry.website}</span>
+                      <ExternalLink size={9} className="shrink-0" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handleCopy(entry.website, 'website'); }}
+                      className={`shrink-0 rounded p-1 transition-all ${copiedField === 'website' ? 'opacity-100 text-[var(--mint)]' : 'opacity-0 text-[var(--moon-dim)] group-hover:opacity-100 hover:text-[var(--mint)]'}`}
+                      title={isEn ? 'Copy website' : '复制网站'}
+                      aria-label={isEn ? 'Copy website' : '复制网站'}
+                    >
+                      <Copy size={10} />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -208,10 +220,10 @@ export function EntryCard({ entry, index = 0 }: { entry: Entry; index?: number }
                   {showPassword ? entry.password : '•'.repeat(Math.min(entry.password?.length || 8, 16))}
                 </code>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={(e) => { e.stopPropagation(); setShowPassword(!showPassword); }} className="text-[var(--moon-faint)] hover:text-[var(--moon)] p-1">
+                  <button onClick={(e) => { e.stopPropagation(); setShowPassword(!showPassword); }} className="text-[var(--moon-dim)] hover:text-[var(--moon)] p-1">
                     {showPassword ? <EyeOff size={12} /> : <Eye size={12} />}
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); handleCopy(entry.password || '', 'password'); }} className="text-[var(--moon-faint)] hover:text-[var(--mint)] p-1">
+                  <button onClick={(e) => { e.stopPropagation(); handleCopy(entry.password || '', 'password'); }} className="text-[var(--moon-dim)] hover:text-[var(--mint)] p-1">
                     <Copy size={12} />
                   </button>
                 </div>

@@ -236,12 +236,12 @@ export function EntryModal() {
     });
   }
 
-  // 输入网址后自动获取 favicon（防抖 600ms）
+  // 仅新增账号：输入网址后自动获取 favicon 和网页标题（防抖 600ms）
   useEffect(() => {
-    if (!form.website?.trim()) return;
+    if (isEditing || !form.website?.trim()) return;
     const timer = setTimeout(() => fetchFavicon(true), 600);
     return () => clearTimeout(timer);
-  }, [form.website]);
+  }, [form.website, isEditing]);
 
   // 转换图标路径：http URL 直接显示，本地文件用 convertFileSrc
   const [iconLoadError, setIconLoadError] = useState(false);
