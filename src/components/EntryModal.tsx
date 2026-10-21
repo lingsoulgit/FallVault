@@ -14,16 +14,21 @@ import { getPasswordStrength, generatePassword } from '@/lib/passwordUtils';
 import { SpecularButton } from '@/components/SpecularButton';
 import { TotpQrTools } from '@/components/TotpQrTools';
 import { getIconsDir, getAttachmentsDir, isLocalMediaPath } from '@/lib/mediaPaths';
-import { writeFileBytes, removePath, readFileBytes } from '@/lib/rustFs';
+import { copyFile, writeFileBytes, removePath, readFileBytes } from '@/lib/rustFs';
 import { BUILTIN_TEMPLATES } from '@/lib/templates';
 import { encryptedFieldLabel } from '@/lib/entryEncryption';
 import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
+import { FAVORITES_VIEW_ID, TRASH_VIEW_ID } from '@/lib/constants';
 
 export function EntryModal() {
-  const { editingEntry, setEditingEntry, setIsEntryModalOpen, folders, tags, refreshAll } = useAppStore();
+  const {
+    editingEntry, setEditingEntry, newEntryPrefill, setNewEntryPrefill,
+    setIsEntryModalOpen, folders, tags, refreshAll,
+  } = useAppStore();
   const { addToast } = useToastStore();
   const isEn = useAppStore((s) => s.settings?.language === 'en');
   const isEditing = !!editingEntry;
+  const isPrefilledNewEntry = !isEditing && !!newEntryPrefill;
 
   const [form, setForm] = useState<Partial<Entry>>({
     title: '', username: '', password: '', website: '', notes: '', icon: '', folder_id: null, is_favorite: false,
@@ -55,13 +60,22 @@ export function EntryModal() {
       getEntryTags(editingEntry.id).then(setSelectedTags);
       getAttachments(editingEntry.id).then(setAttachments);
     } else {
+      const { selectedFolderId, selectedTagId } = useAppStore.getState();
+      const isRegularFolder = selectedFolderId !== null
+        && selectedFolderId !== FAVORITES_VIEW_ID
+        && selectedFolderId !== TRASH_VIEW_ID;
+      const prefill = newEntryPrefill?.entry;
       setForm({
-        title: '', username: '', password: '', website: '', notes: '', icon: '', folder_id: null, is_favorite: false,
+        title: '', username: '', password: '', website: '', notes: '', icon: '',
+        folder_id: newEntryPrefill ? (prefill?.folder_id ?? null) : (isRegularFolder ? selectedFolderId : null),
+        is_favorite: newEntryPrefill ? !!prefill?.is_favorite : selectedFolderId === FAVORITES_VIEW_ID,
+        ...prefill,
       });
-      setCustomIcon(null);
-      setCustomFields([]);
-      setSelectedTags([]);
+      setCustomIcon(prefill?.icon || null);
+      setCustomFields(prefill?.customFields?.map((field) => ({ ...field })) || []);
+      setSelectedTags(newEntryPrefill?.tagIds ?? (selectedTagId !== null ? [selectedTagId] : []));
       setPasswordHistory([]);
+      setAttachments([]);
       setStrength(null);
       setTotpInfo(null);
     }
@@ -140,7 +154,7 @@ export function EntryModal() {
       await writeFileBytes(destPath, data);
 
       // 删除旧的本地图标文件（如果存在）
-      if (customIcon && isLocalMediaPath(customIcon)) {
+      if (customIcon && isLocalMediaPath(customIcon) && customIcon !== newEntryPrefill?.entry.icon) {
         try { await removePath(customIcon); } catch {}
       }
 
@@ -195,7 +209,7 @@ export function EntryModal() {
 
       if (hit) {
         // 删除旧本地图标文件（如果存在）
-        if (customIcon && isLocalMediaPath(customIcon)) {
+        if (customIcon && isLocalMediaPath(customIcon) && customIcon !== newEntryPrefill?.entry.icon) {
           try { await removePath(customIcon); } catch {}
         }
         setCustomIcon(hit.url);
@@ -238,10 +252,10 @@ export function EntryModal() {
 
   // 仅新增账号：输入网址后自动获取 favicon 和网页标题（防抖 600ms）
   useEffect(() => {
-    if (isEditing || !form.website?.trim()) return;
+    if (isEditing || isPrefilledNewEntry || !form.website?.trim()) return;
     const timer = setTimeout(() => fetchFavicon(true), 600);
     return () => clearTimeout(timer);
-  }, [form.website, isEditing]);
+  }, [form.website, isEditing, isPrefilledNewEntry]);
 
   // 转换图标路径：http URL 直接显示，本地文件用 convertFileSrc
   const [iconLoadError, setIconLoadError] = useState(false);
@@ -328,29 +342,42 @@ export function EntryModal() {
       return;
     }
 
+    let duplicatedIconPath: string | null = null;
+    let createdEntryId: number | null = null;
     try {
       if (isEditing && editingEntry) {
         await updateEntry(editingEntry.id, { ...form, icon: customIcon || '', customFields: customFields.filter(f => f.key.trim()) }, selectedTags);
         addToast('账号已更新', 'success');
       } else {
-        const newId = await createEntry({ ...form, icon: customIcon || '', customFields: customFields.filter(f => f.key.trim()) }, selectedTags);
+        let iconForSave = customIcon || '';
+        if (isPrefilledNewEntry && iconForSave && iconForSave === newEntryPrefill?.entry.icon && isLocalMediaPath(iconForSave)) {
+          const iconsDir = await getIconsDir();
+          const extMatch = iconForSave.match(/\.([a-zA-Z0-9]+)$/);
+          const ext = extMatch?.[1] || 'png';
+          duplicatedIconPath = `${iconsDir}\\icon_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+          await copyFile(iconForSave, duplicatedIconPath);
+          iconForSave = duplicatedIconPath;
+        }
+        createdEntryId = await createEntry({ ...form, icon: iconForSave, customFields: customFields.filter(f => f.key.trim()) }, selectedTags);
         addToast('账号添加成功', 'success');
         // 把暂存的附件正式写入数据库
         const pending = attachments.filter((a) => a._pending);
         if (pending.length > 0) {
           for (const p of pending) {
-            await addAttachment(newId, p.file_name, p.file_path, p.file_size);
+            await addAttachment(createdEntryId, p.file_name, p.file_path, p.file_size);
           }
-          setAttachments(await getAttachments(newId));
+          setAttachments(await getAttachments(createdEntryId));
         }
       }
 
-      // 保存后重置到"全部账号"视图，确保新账号立即可见
-      useAppStore.getState().setSelectedFolderId(null);
       await refreshAll();
       setIsEntryModalOpen(false);
       setEditingEntry(null);
+      setNewEntryPrefill(null);
     } catch (e) {
+      if (duplicatedIconPath && createdEntryId === null) {
+        try { await removePath(duplicatedIconPath); } catch {}
+      }
       addToast(e instanceof Error ? e.message : '保存失败，请重试', 'error');
     }
   };
@@ -408,7 +435,7 @@ export function EntryModal() {
             </div>
             <h2 className="text-xl font-bold text-[var(--moon)]">{isEditing ? '编辑账号' : '新建账号'}</h2>
           </div>
-          <button onClick={() => { setIsEntryModalOpen(false); setEditingEntry(null); }}
+          <button onClick={() => { setIsEntryModalOpen(false); setEditingEntry(null); setNewEntryPrefill(null); }}
             className="text-[var(--moon-faint)] hover:text-[var(--moon)] transition-colors p-1 rounded-lg hover:bg-[rgba(192,200,216,0.08)]">
             <X size={22} />
           </button>
@@ -713,7 +740,7 @@ export function EntryModal() {
 
         {/* 底部按钮 */}
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[rgba(192,200,216,0.08)]">
-          <button onClick={() => { setIsEntryModalOpen(false); setEditingEntry(null); }}
+          <button onClick={() => { setIsEntryModalOpen(false); setEditingEntry(null); setNewEntryPrefill(null); }}
             className="rune-btn px-5 py-2.5 text-sm">取消</button>
           {editingEntry?.decryptErrors?.length ? <p className="text-xs text-amber-200 flex-1">{isEn ? 'Unreadable fields (saving blocked): ' : '无法解密，已阻止保存：'}{editingEntry.decryptErrors.map((field) => encryptedFieldLabel(field, isEn)).join('、')}</p> : null}
           <SpecularButton disabled={!!editingEntry?.decryptErrors?.length} onClick={handleSave} className="px-6 py-2.5 text-sm" style={{ background: 'rgba(210,210,220,0.15)', borderColor: 'rgba(210,210,220,0.35)', color: 'var(--mint)' }}>

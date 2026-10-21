@@ -3,6 +3,11 @@ import type { Entry, Folder, Tag, AppSettings, ThemeDef } from '@/types';
 import { THEMES, applyTheme } from '@/types';
 import { DEFAULT_BG_TOKEN, FAVORITES_VIEW_ID, TRASH_VIEW_ID } from '@/lib/constants';
 
+interface NewEntryPrefill {
+  entry: Partial<Entry>;
+  tagIds: number[];
+}
+
 interface AppState {
   // Data
   entries: Entry[];
@@ -21,7 +26,7 @@ interface AppState {
   isSidebarOpen: boolean;
   isEntryModalOpen: boolean;
   editingEntry: Entry | null;
-  templatePrefill: { title: string; website: string; notes: string; customFields: any[] } | null;
+  newEntryPrefill: NewEntryPrefill | null;
   isSettingsOpen: boolean;
   isPasswordGeneratorOpen: boolean;
   isSecurityAuditOpen: boolean;
@@ -55,7 +60,7 @@ interface AppState {
   setIsSidebarOpen: (open: boolean) => void;
   setIsEntryModalOpen: (open: boolean) => void;
   setEditingEntry: (entry: Entry | null) => void;
-  setTemplatePrefill: (prefill: { title: string; website: string; notes: string; customFields: any[] } | null) => void;
+  setNewEntryPrefill: (prefill: NewEntryPrefill | null) => void;
   setIsSettingsOpen: (open: boolean) => void;
   setIsPasswordGeneratorOpen: (open: boolean) => void;
   setIsSecurityAuditOpen: (open: boolean) => void;
@@ -154,7 +159,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   isSidebarOpen: true,
   isEntryModalOpen: false,
   editingEntry: null,
-  templatePrefill: null,
+  newEntryPrefill: null,
   isSettingsOpen: false,
   isPasswordGeneratorOpen: false,
   isSecurityAuditOpen: false,
@@ -176,7 +181,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setIsSidebarOpen: (open) => set({ isSidebarOpen: open }),
   setIsEntryModalOpen: (open) => set({ isEntryModalOpen: open }),
   setEditingEntry: (entry) => set({ editingEntry: entry }),
-  setTemplatePrefill: (prefill) => set({ templatePrefill: prefill }),
+  setNewEntryPrefill: (prefill) => set({ newEntryPrefill: prefill }),
   setIsSettingsOpen: (open) => set({ isSettingsOpen: open }),
   setIsPasswordGeneratorOpen: (open) => set({ isPasswordGeneratorOpen: open }),
   setIsSecurityAuditOpen: (open) => set({ isSecurityAuditOpen: open }),

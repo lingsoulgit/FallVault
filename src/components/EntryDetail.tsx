@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Lock, Star, ExternalLink, Copy, Eye, EyeOff, Edit2, Trash2, Paperclip, X, Wand2, Folder } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
-import { toggleFavorite, moveEntryToTrash } from '@/lib/db';
+import { getEntryTags, toggleFavorite, moveEntryToTrash } from '@/lib/db';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { getShareableOtpAuthUri, getTotpPeriod, getTotpWithRemaining } from '@/lib/totp';
@@ -27,7 +27,7 @@ function getFaviconUrl(website: string): string | null {
 export function EntryDetail() {
   const {
     entries, selectedEntryId, isDetailOpen, setDetailOpen,
-    setEditingEntry, setIsEntryModalOpen, setConfirmDialog, refreshAll,
+    setEditingEntry, setNewEntryPrefill, setIsEntryModalOpen, setConfirmDialog, refreshAll,
   } = useAppStore();
   const { addToast } = useToastStore();
   const isEn = useAppStore((s) => s.settings.language === 'en');
@@ -125,6 +125,38 @@ export function EntryDetail() {
     setEditingEntry(entry);
     setIsEntryModalOpen(true);
     setDetailOpen(false);
+  };
+
+  const handleDuplicate = async () => {
+    if (entry.decryptErrors?.length) {
+      addToast(isEn ? 'Unreadable fields cannot be duplicated safely' : '存在无法解密的字段，无法安全复制新增', 'warning');
+      return;
+    }
+
+    try {
+      const tagIds = await getEntryTags(entry.id);
+      setNewEntryPrefill({
+        entry: {
+          title: entry.title,
+          username: entry.username,
+          password: entry.password,
+          website: entry.website,
+          notes: entry.notes,
+          totp_secret: entry.totp_secret,
+          icon: entry.icon || '',
+          folder_id: entry.folder_id,
+          is_favorite: entry.is_favorite,
+          customFields: entry.customFields?.map((field) => ({ ...field })) || [],
+        },
+        tagIds,
+      });
+      setEditingEntry(null);
+      setIsEntryModalOpen(true);
+      setDetailOpen(false);
+    } catch (error) {
+      console.error('Duplicate entry preparation failed:', error);
+      addToast(isEn ? 'Unable to prepare a duplicate' : '复制新增准备失败，请重试', 'error');
+    }
   };
 
   const handleAutofill = () => {
@@ -301,6 +333,10 @@ export function EntryDetail() {
           <button onClick={handleEdit}
             className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl bg-[rgba(210,210,220,0.1)] text-[var(--moon)] hover:bg-[rgba(210,210,220,0.18)] transition-all">
             <Edit2 size={15} /> {isEn ? 'Edit' : '编辑'}
+          </button>
+          <button onClick={handleDuplicate}
+            className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl bg-[rgba(210,210,220,0.1)] text-[var(--moon)] hover:bg-[rgba(210,210,220,0.18)] transition-all">
+            <Copy size={15} /> {isEn ? 'Duplicate' : '复制新增'}
           </button>
           <button onClick={handleDelete}
             className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl text-[var(--danger)] hover:bg-[rgba(212,112,112,0.12)] transition-all ml-auto">

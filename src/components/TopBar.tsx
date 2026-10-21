@@ -60,7 +60,7 @@ export function TopBar() {
   };
 
   const openModal = () => {
-    useAppStore.getState().setTemplatePrefill(null);
+    useAppStore.getState().setNewEntryPrefill(null);
     useAppStore.getState().setIsEntryModalOpen(true);
   };
 
