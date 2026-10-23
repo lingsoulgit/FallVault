@@ -31,7 +31,7 @@
         "enable": true,
         "scope": ["$APPDATA/**", "$APPCONFIG/**", "$HOME/**", "D:/**", "D:\\**", "C:/**", "C:\\**"]
       },
-      "capabilities": ["default"]
+      "capabilities": ["default", "screen-capture"]
     }
   },
   "bundle": {

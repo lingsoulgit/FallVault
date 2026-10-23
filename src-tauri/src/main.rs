@@ -10,7 +10,10 @@ mod vault_rekey;
 mod website_metadata;
 use autofill::{start_autofill, AutofillState, FillTarget};
 pub use github_backup::*;
-use screen_capture::capture_screen_region;
+use screen_capture::{
+    capture_screen_region, finish_screen_capture, get_screen_capture_info, open_screen_capture,
+    show_screen_capture, ScreenCaptureState,
+};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Instant;
@@ -252,6 +255,7 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(AutofillState::new()))
+        .manage(Arc::new(ScreenCaptureState::default()))
         .manage(Arc::new(LockPolicy {
             grace_enabled: Mutex::new(false),
         }))
@@ -345,7 +349,11 @@ fn main() {
             github_cred_delete,
             github_save_index,
             github_load_index,
+            open_screen_capture,
+            get_screen_capture_info,
             capture_screen_region,
+            show_screen_capture,
+            finish_screen_capture,
             fetch_website_title,
         ])
         .run(tauri::generate_context!())

@@ -128,8 +128,8 @@ export function EntryDetail() {
   };
 
   const handleDuplicate = async () => {
-    if (entry.decryptErrors?.length) {
-      addToast(isEn ? 'Unreadable fields cannot be duplicated safely' : '存在无法解密的字段，无法安全复制新增', 'warning');
+    if (entry.decryptErrors?.includes('custom_fields')) {
+      addToast(isEn ? 'Custom field names are unreadable and cannot be duplicated safely' : '自定义字段名称无法解密，无法安全复制新增', 'warning');
       return;
     }
 
@@ -138,15 +138,11 @@ export function EntryDetail() {
       setNewEntryPrefill({
         entry: {
           title: entry.title,
-          username: entry.username,
-          password: entry.password,
           website: entry.website,
-          notes: entry.notes,
-          totp_secret: entry.totp_secret,
           icon: entry.icon || '',
           folder_id: entry.folder_id,
           is_favorite: entry.is_favorite,
-          customFields: entry.customFields?.map((field) => ({ ...field })) || [],
+          customFields: entry.customFields?.map((field) => ({ key: field.key, value: '' })) || [],
         },
         tagIds,
       });
@@ -282,10 +278,33 @@ export function EntryDetail() {
         {entry.customFields && entry.customFields.length > 0 && (
           <div className="mt-4 space-y-2.5">
             <div className="text-[11px] text-[var(--moon-dim)] font-semibold uppercase tracking-wider">{isEn ? 'Custom Fields' : '自定义字段'}</div>
-            {entry.customFields.map((f, i) => (
-              <FieldRow key={i} label={f.key} value={f.hidden ? (showPassword ? f.value : '•'.repeat(Math.min((f.value?.length || 8), 24))) : f.value}
-                revealed showCopy copied={copied === `cf${i}`} onCopy={() => handleCopy(f.value || '', `cf${i}`)} />
-            ))}
+            {entry.customFields.map((f, i) => {
+              const value = f.hidden
+                ? (showPassword ? f.value : '•'.repeat(Math.min((f.value?.length || 8), 24)))
+                : f.value;
+              const fieldId = `cf${i}`;
+              const isCopied = copied === fieldId;
+
+              return (
+                <div key={i} className="group flex min-w-0 items-center gap-2">
+                  <span className="w-[38%] max-w-[180px] shrink-0 break-words text-[11px] font-semibold uppercase leading-tight tracking-wider text-[var(--moon-dim)]">
+                    {f.key}
+                  </span>
+                  <code className="min-w-0 flex-1 truncate break-all text-[13px] font-mono font-semibold text-[var(--moon)]">
+                    {value}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(f.value || '', fieldId)}
+                    className={`shrink-0 p-1 transition-opacity ${isCopied ? 'text-[var(--mint)] opacity-100' : 'text-[var(--moon-dim)] opacity-60 group-hover:opacity-100 focus-visible:opacity-100 hover:text-[var(--mint)]'}`}
+                    title={isEn ? 'Copy value' : '复制字段值'}
+                    aria-label={isEn ? 'Copy value' : '复制字段值'}
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 

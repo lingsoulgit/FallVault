@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Copy, Download, Loader2, QrCode, ScanLine, ShieldAlert, Upload, X } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { Image as TauriImage } from '@tauri-apps/api/image';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { readImage, writeImage } from '@tauri-apps/plugin-clipboard-manager';
+import { writeImage } from '@tauri-apps/plugin-clipboard-manager';
 import { readFile, writeFile } from '@tauri-apps/plugin-fs';
 import jsQR from 'jsqr';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -20,6 +21,11 @@ interface TotpQrToolsProps {
 }
 
 type BusyMode = 'screen' | 'upload' | null;
+
+interface ScreenCaptureResult {
+  outcome: 'decoded' | 'empty' | 'cancelled' | 'error';
+  value?: string | null;
+}
 
 const IMAGE_MIME: Record<string, string> = {
   png: 'image/png',
@@ -37,13 +43,8 @@ export function TotpQrTools({ isEn, onDetected, shareValue, shareLabel, shareOnl
   const [shareBusy, setShareBusy] = useState<'copy' | 'save' | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const shareCanvasRef = useRef<HTMLCanvasElement>(null);
-
-  const decodeRgba = (rgba: Uint8Array, width: number, height: number): string | null => {
-    if (!width || !height || rgba.length !== width * height * 4) return null;
-    const pixels = new Uint8ClampedArray(rgba.length);
-    pixels.set(rgba);
-    return jsQR(pixels, width, height, { inversionAttempts: 'attemptBoth' })?.data || null;
-  };
+  const captureUnlistenRef = useRef<null | (() => void)>(null);
+  const captureTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const decodeSource = (source: CanvasImageSource, sourceWidth: number, sourceHeight: number): string | null => {
     if (!sourceWidth || !sourceHeight) return null;
@@ -60,7 +61,10 @@ export function TotpQrTools({ isEn, onDetected, shareValue, shareLabel, shareOnl
     if (!context) return null;
     context.drawImage(source, 0, 0, width, height);
     const imageData = context.getImageData(0, 0, width, height);
-    return jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' })?.data || null;
+    const decoded = jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' })?.data || null;
+    imageData.data.fill(0);
+    context.clearRect(0, 0, width, height);
+    return decoded;
   };
 
   const decodeBlob = async (blob: Blob): Promise<string | null> => {
@@ -103,18 +107,14 @@ export function TotpQrTools({ isEn, onDetected, shareValue, shareLabel, shareOnl
     }
   };
 
-  const readCapturedImage = async () => {
-    let lastError: unknown;
-    for (let attempt = 0; attempt < 8; attempt++) {
-      try {
-        return await readImage();
-      } catch (error) {
-        lastError = error;
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    }
-    throw lastError || new Error('clipboard image unavailable');
-  };
+  useEffect(() => {
+    return () => {
+      captureUnlistenRef.current?.();
+      captureUnlistenRef.current = null;
+      if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
+      captureTimeoutRef.current = null;
+    };
+  }, []);
 
   const handleUpload = async () => {
     if (busy) return;
@@ -143,23 +143,50 @@ export function TotpQrTools({ isEn, onDetected, shareValue, shareLabel, shareOnl
     if (busy) return;
     setBusy('screen');
     try {
-      // 后端暂时隐藏 FallVault 并唤起 Windows 区域截图；用户拖动框选后，
-      // 系统会把截图写入剪贴板，随后在本机读取像素并识别二维码。
-      const captured = await invoke<boolean>('capture_screen_region');
-      if (!captured) return;
+      captureUnlistenRef.current?.();
+      captureUnlistenRef.current = await listen<ScreenCaptureResult>(
+        'fallvault:screen-capture-result',
+        ({ payload }) => {
+          captureUnlistenRef.current?.();
+          captureUnlistenRef.current = null;
+          if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
+          captureTimeoutRef.current = null;
+          setBusy(null);
 
-      const clipboardImage = await readCapturedImage();
-      try {
-        const [rgba, size] = await Promise.all([clipboardImage.rgba(), clipboardImage.size()]);
-        const decoded = decodeRgba(rgba, size.width, size.height);
-        showDecodeResult(decoded, isEn ? 'No QR code found in the selected area' : '框选区域中未识别到二维码');
-      } finally {
-        await clipboardImage.close();
-      }
+          if (payload.outcome === 'decoded') {
+            showDecodeResult(
+              payload.value || null,
+              isEn ? 'No QR code found in the selected area' : '框选区域中未识别到二维码',
+            );
+          } else if (payload.outcome === 'empty') {
+            showDecodeResult(
+              null,
+              isEn ? 'No QR code found in the selected area' : '框选区域中未识别到二维码',
+            );
+          } else if (payload.outcome === 'error') {
+            addToast(isEn ? 'Region capture failed' : '区域截图失败，请重试', 'error');
+          }
+        },
+      );
+
+      // 使用独立的无边框置顶窗口承载框选层，主窗口不会再切换全屏尺寸。
+      await invoke('open_screen_capture', { isEn });
+      captureTimeoutRef.current = setTimeout(() => {
+        void invoke('finish_screen_capture', { outcome: 'error', value: null }).catch((error) => {
+          console.error('Timed out waiting for screen capture:', error);
+          captureUnlistenRef.current?.();
+          captureUnlistenRef.current = null;
+          setBusy(null);
+          addToast(isEn ? 'The capture window did not open. Please try again.' : '截图窗口未能打开，请重试', 'error');
+        });
+      }, 12000);
     } catch (error) {
       console.error('TOTP region capture failed:', error);
+      captureUnlistenRef.current?.();
+      captureUnlistenRef.current = null;
+      if (captureTimeoutRef.current) clearTimeout(captureTimeoutRef.current);
+      captureTimeoutRef.current = null;
       addToast(isEn ? 'Region capture failed' : '区域截图失败，请重试', 'error');
-    } finally {
       setBusy(null);
     }
   };
@@ -249,7 +276,7 @@ export function TotpQrTools({ isEn, onDetected, shareValue, shareLabel, shareOnl
       </button>
       {!shareOnly && (
         <span className="text-[10px] text-[var(--moon-faint)]">
-          {isEn ? 'Drag to select · decoded locally' : '拖动框选区域 · 仅在本机识别'}
+            {isEn ? 'Drag to select · memory only · no files saved' : '拖动框选区域 · 仅内存识别 · 不保存截图'}
         </span>
       )}
 
@@ -310,6 +337,7 @@ export function TotpQrTools({ isEn, onDetected, shareValue, shareLabel, shareOnl
           </div>
         </div>
       ), document.body)}
+
     </div>
   );
 }

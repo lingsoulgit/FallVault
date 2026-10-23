@@ -1,0 +1,6 @@
+{
+  "identifier": "screen-capture",
+  "description": "Minimal permissions for the isolated in-memory screen capture overlay",
+  "windows": ["screen-capture"],
+  "permissions": ["core:default"]
+}
