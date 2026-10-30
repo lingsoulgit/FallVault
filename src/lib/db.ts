@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS tags (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE,
   color TEXT DEFAULT '#7DD3C0',
+  sort_order INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS entries (
   icon TEXT DEFAULT 'Lock',
   folder_id INTEGER DEFAULT NULL,
   is_favorite INTEGER DEFAULT 0,
+  sort_order INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now', 'localtime')),
   updated_at TEXT DEFAULT (datetime('now', 'localtime')),
   deleted_at TEXT DEFAULT NULL,
@@ -124,6 +126,33 @@ export async function initDatabase(): Promise<Database> {
       await db.execute(m);
     } catch {}
   }
+  try {
+    await db.execute('ALTER TABLE entries ADD COLUMN sort_order INTEGER DEFAULT 0');
+  } catch {}
+  const entryOrderMigration = await db.select<{ value: string }[]>(
+    'SELECT value FROM app_metadata WHERE key = ?', ['entry_sort_order_initialized']
+  );
+  if (entryOrderMigration.length === 0) {
+    await db.execute(`UPDATE entries
+      SET sort_order = (
+        SELECT COUNT(*) FROM entries AS earlier
+        WHERE earlier.is_favorite > entries.is_favorite
+          OR (earlier.is_favorite = entries.is_favorite AND earlier.updated_at > entries.updated_at)
+          OR (earlier.is_favorite = entries.is_favorite AND earlier.updated_at = entries.updated_at AND earlier.id > entries.id)
+      )`);
+    await db.execute("INSERT OR IGNORE INTO app_metadata (key, value) VALUES ('entry_sort_order_initialized', '1')");
+  }
+  try {
+    await db.execute('ALTER TABLE tags ADD COLUMN sort_order INTEGER DEFAULT 0');
+  } catch {}
+  const tagOrderMigration = await db.select<{ value: string }[]>(
+    'SELECT value FROM app_metadata WHERE key = ?', ['tag_sort_order_initialized']
+  );
+  if (tagOrderMigration.length === 0) {
+    await db.execute(`UPDATE tags
+      SET sort_order = (SELECT COUNT(*) FROM tags AS earlier WHERE earlier.name < tags.name)`);
+    await db.execute("INSERT OR IGNORE INTO app_metadata (key, value) VALUES ('tag_sort_order_initialized', '1')");
+  }
   await db.execute('CREATE INDEX IF NOT EXISTS idx_entries_deleted_at ON entries(deleted_at)');
   // 将仍使用旧默认紫色的“重要”标签迁移为橙色；用户自定义过的颜色保持不变
   await db.execute(
@@ -148,16 +177,23 @@ export async function checkpointDatabase(): Promise<void> {
 
 // === Folders ===
 export async function getFolders(): Promise<Folder[]> {
-  return getDb().select('SELECT * FROM folders ORDER BY sort_order, created_at');
+  return getDb().select('SELECT * FROM folders ORDER BY sort_order, created_at, id');
 }
 
 export async function createFolder(name: string, icon: string = 'Folder', parentId: number | null = null): Promise<number> {
   const result = await getDb().execute(
-    'INSERT INTO folders (name, icon, parent_id) VALUES (?, ?, ?)',
+    'INSERT INTO folders (name, icon, parent_id, sort_order) VALUES (?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM folders))',
     [name, icon, parentId]
   );
   markVaultChanged();
   return Number(result.lastInsertId);
+}
+
+export async function reorderFolders(ids: number[]): Promise<void> {
+  for (let index = 0; index < ids.length; index++) {
+    await getDb().execute('UPDATE folders SET sort_order = ? WHERE id = ?', [index, ids[index]]);
+  }
+  markVaultChanged();
 }
 
 export async function updateFolder(id: number, name: string, icon: string): Promise<void> {
@@ -172,13 +208,23 @@ export async function deleteFolder(id: number): Promise<void> {
 
 // === Tags ===
 export async function getTags(): Promise<Tag[]> {
-  return getDb().select('SELECT * FROM tags ORDER BY name');
+  return getDb().select('SELECT * FROM tags ORDER BY sort_order, created_at, id');
 }
 
 export async function createTag(name: string, color: string = '#7DD3C0'): Promise<number> {
-  const result = await getDb().execute('INSERT INTO tags (name, color) VALUES (?, ?)', [name, color]);
+  const result = await getDb().execute(
+    'INSERT INTO tags (name, color, sort_order) VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM tags))',
+    [name, color]
+  );
   markVaultChanged();
   return Number(result.lastInsertId);
+}
+
+export async function reorderTags(ids: number[]): Promise<void> {
+  for (let index = 0; index < ids.length; index++) {
+    await getDb().execute('UPDATE tags SET sort_order = ? WHERE id = ?', [index, ids[index]]);
+  }
+  markVaultChanged();
 }
 
 export async function updateTag(id: number, name: string, color: string): Promise<void> {
@@ -255,7 +301,7 @@ export async function getEntries(folderId?: number, tagId?: number, search?: str
     sql += ' WHERE ' + conditions.join(' AND ');
   }
 
-  sql += ' GROUP BY e.id ORDER BY e.is_favorite DESC, e.updated_at DESC';
+  sql += ' GROUP BY e.id ORDER BY e.sort_order, e.id';
 
   const rows: any[] = await getDb().select(sql, params);
   const decrypted = await decryptRows(rows);
@@ -298,7 +344,7 @@ export async function getFavorites(): Promise<Entry[]> {
     LEFT JOIN tags t ON et.tag_id = t.id
     LEFT JOIN folders f ON e.folder_id = f.id
     WHERE e.is_favorite = 1 AND e.deleted_at IS NULL
-    GROUP BY e.id ORDER BY e.updated_at DESC
+    GROUP BY e.id ORDER BY e.sort_order, e.id
   `);
   return decryptRows(rows);
 }
@@ -320,8 +366,8 @@ export async function createEntry(entry: Partial<Entry>, tagIds: number[] = []):
     ? await encryptField(key as any, JSON.stringify(entry.customFields))
     : '';
   const result = await getDb().execute(
-    `INSERT INTO entries (title, username, password, totp_secret, website, notes, icon, folder_id, is_favorite, custom_fields)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO entries (title, username, password, totp_secret, website, notes, icon, folder_id, is_favorite, custom_fields, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM entries))`,
     [
       entry.title || '',
       entry.username ? await encryptField(key as any, entry.username) : '',
@@ -343,6 +389,24 @@ export async function createEntry(entry: Partial<Entry>, tagIds: number[] = []):
 
   markVaultChanged();
   return entryId;
+}
+
+export async function reorderEntries(visibleIds: number[]): Promise<void> {
+  const allRows: { id: number }[] = await getDb().select('SELECT id FROM entries ORDER BY sort_order, id');
+  const existingIds = new Set(allRows.map((row) => Number(row.id)));
+  const reorderedVisibleIds = visibleIds.map(Number).filter((id) => existingIds.has(id));
+  const visibleIdSet = new Set(reorderedVisibleIds);
+  if (reorderedVisibleIds.length < 2) return;
+
+  let nextVisibleIndex = 0;
+  const orderedIds = allRows.map((row) => {
+    if (!visibleIdSet.has(Number(row.id))) return Number(row.id);
+    return reorderedVisibleIds[nextVisibleIndex++];
+  });
+  for (let index = 0; index < orderedIds.length; index++) {
+    await getDb().execute('UPDATE entries SET sort_order = ? WHERE id = ?', [index, orderedIds[index]]);
+  }
+  markVaultChanged();
 }
 
 export async function updateEntry(id: number, entry: Partial<Entry>, tagIds?: number[]): Promise<void> {

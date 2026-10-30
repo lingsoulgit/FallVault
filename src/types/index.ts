@@ -11,6 +11,7 @@ export interface Tag {
   id: number;
   name: string;
   color: string;
+  sort_order?: number;
   created_at: string;
 }
 
@@ -25,6 +26,7 @@ export interface Entry {
   icon: string;
   folder_id: number | null;
   is_favorite: boolean;
+  sort_order?: number;
   created_at: string;
   updated_at: string;
   deleted_at?: string | null;

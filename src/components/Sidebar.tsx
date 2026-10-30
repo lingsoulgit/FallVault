@@ -1,17 +1,21 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
+import { DragDropProvider, DragOverlay } from '@dnd-kit/react';
+import type { DragEndEvent } from '@dnd-kit/react';
+import { isSortable } from '@dnd-kit/react/sortable';
 import {
   Folder, Inbox, Star, Hash, ChevronRight, ChevronLeft,
   Plus, Settings, Lock, Gamepad2, MessageCircle, Landmark,
-  Briefcase, Sparkles, Edit3, Trash2, ShieldAlert
+  Briefcase, Sparkles, Edit3, Trash2, ShieldAlert, GripVertical
 } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
-import { createFolder, updateFolder, deleteFolder, createTag, updateTag, deleteTag } from '@/lib/db';
+import { createFolder, updateFolder, deleteFolder, reorderFolders, createTag, updateTag, deleteTag, reorderTags } from '@/lib/db';
 import { runSecurityAudit } from '@/lib/securityAudit';
 import { ShinyText } from '@/components/ShinyText';
 import { StrokeText } from '@/components/StrokeText';
 import { ClickSpark } from '@/components/ClickSpark';
 import { GlareHover } from '@/components/GlareHover';
+import { SortableRow } from '@/components/SortableRow';
 import { FAVORITES_VIEW_ID, TRASH_VIEW_ID } from '@/lib/constants';
 
 const iconMap: Record<string, React.ElementType> = {
@@ -26,6 +30,14 @@ const iconMap: Record<string, React.ElementType> = {
   Hash, hash: Hash,
   Sparkles, sparkles: Sparkles,
 };
+
+function moveArrayItem<T>(items: T[], sourceIndex: number, targetIndex: number): T[] {
+  if (sourceIndex < 0 || sourceIndex >= items.length || targetIndex < 0 || targetIndex >= items.length || sourceIndex === targetIndex) return items;
+  const next = [...items];
+  const [moved] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, moved);
+  return next;
+}
 
 const LucideIconPicker = lazy(() => import('@/components/LucideIconPicker').then((module) => ({ default: module.LucideIconPicker })));
 const DynamicLucideIcon = lazy(() => import('@/components/LucideIconPicker').then((module) => ({ default: module.DynamicLucideIcon })));
@@ -77,7 +89,7 @@ function TagColorOptions({ value, onChange }: { value: string; onChange: (color:
 export function Sidebar() {
   const {
     folders, tags, entries, selectedFolderId, selectedTagId, favorites, trashEntries,
-    isSidebarOpen, setIsSidebarOpen, setSelectedFolderId,
+    isSidebarOpen, setIsSidebarOpen, setSelectedFolderId, setFolders, setTags,
     setSelectedTagId, setSearchQuery, setIsSettingsOpen,
     setIsPasswordGeneratorOpen, setIsSecurityAuditOpen, refreshAll, setConfirmDialog
   } = useAppStore();
@@ -103,6 +115,28 @@ export function Sidebar() {
   const [editTagName, setEditTagName] = useState('');
   const [editTagColor, setEditTagColor] = useState('#7DD3C0');
   const [hoveredItem, setHoveredItem] = useState<number | null>(null);
+  const handleSidebarDragEnd = async (event: DragEndEvent) => {
+    if (event.canceled) return;
+    const source = event.operation.source;
+    if (!isSortable(source) || source.group !== source.initialGroup || source.initialIndex === source.index) return;
+
+    try {
+      if (source.group === 'folder') {
+        const orderedFolders = moveArrayItem(folders, source.initialIndex, source.index);
+        setFolders(orderedFolders);
+        await reorderFolders(orderedFolders.map((folder) => folder.id));
+      } else if (source.group === 'tag') {
+        const orderedTags = moveArrayItem(tags, source.initialIndex, source.index);
+        setTags(orderedTags);
+        await reorderTags(orderedTags.map((tag) => tag.id));
+      } else {
+        return;
+      }
+    } catch {
+      await refreshAll();
+      addToast(source.group === 'folder' ? '分类排序保存失败' : '标签排序保存失败', 'error');
+    }
+  };
 
   const handleAddFolder = async () => {
     const folderName = newFolderName.trim();
@@ -320,6 +354,7 @@ export function Sidebar() {
       {/* 魔法阵装饰线 */}
       <div className="rune-line mx-4 mb-2" />
 
+      <DragDropProvider onDragEnd={handleSidebarDragEnd}>
       <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5 min-h-0">
         {/* 快速入口 */}
         <SidebarItem active={selectedFolderId === null && selectedTagId === null} onClick={() => { setSelectedFolderId(null); setSelectedTagId(null); setSearchQuery(''); }} icon={<Inbox size={16} />} label="全部账号" />
@@ -352,11 +387,13 @@ export function Sidebar() {
             </div>
           )}
 
-          {folders.map(folder => {
+          {folders.map((folder, index) => {
             const Icon = iconMap[folder.icon];
             const isEditing = editingFolder === folder.id;
             return (
-              <div key={folder.id} className="relative group" onMouseEnter={() => setHoveredItem(folder.id)} onMouseLeave={() => setHoveredItem(null)}>
+              <SortableRow key={folder.id} id={`folder-${folder.id}`} index={index} group="folder" className="w-full">
+                {(handleRef, isDragging) => (
+              <div className="relative group" onMouseEnter={() => setHoveredItem(folder.id)} onMouseLeave={() => setHoveredItem(null)}>
                 {isEditing ? (
                   <div className="px-3 py-2 space-y-2">
                     <input
@@ -389,6 +426,8 @@ export function Sidebar() {
                       </Suspense>
                     )}
                     label={folder.name}
+                    dragHandleRef={handleRef as React.Ref<HTMLSpanElement>}
+                    dragLabel={isEn ? 'Drag to reorder category' : '拖动排序分类'}
                   />
                 )}
                 {!isEditing && hoveredItem === folder.id && (
@@ -398,6 +437,8 @@ export function Sidebar() {
                   </div>
                 )}
               </div>
+                )}
+              </SortableRow>
             );
           })}
         </div>
@@ -424,10 +465,12 @@ export function Sidebar() {
             </div>
           )}
 
-          {tags.map(tag => {
+          {tags.map((tag, index) => {
             const isEditing = editingTag === tag.id;
             return (
-              <div key={tag.id} className="relative group">
+              <SortableRow key={tag.id} id={`tag-${tag.id}`} index={index} group="tag" className="w-full">
+                {(handleRef, isDragging) => (
+              <div className="relative group">
                 {isEditing ? (
                   <div className="px-3 py-2 space-y-2">
                     <input
@@ -448,7 +491,14 @@ export function Sidebar() {
                   </div>
                 ) : (
                   <>
-                    <SidebarItem active={selectedTagId === tag.id} onClick={() => setSelectedTagId(tag.id)} icon={<div className="w-2.5 h-2.5 rounded-full" style={{ background: tag.color }} />} label={tag.name} />
+                    <SidebarItem
+                      active={selectedTagId === tag.id}
+                      onClick={() => setSelectedTagId(tag.id)}
+                      icon={<div className="w-2.5 h-2.5 rounded-full" style={{ background: tag.color }} />}
+                      label={tag.name}
+                      dragHandleRef={handleRef as React.Ref<HTMLSpanElement>}
+                      dragLabel={isEn ? 'Drag to reorder tag' : '拖动排序标签'}
+                    />
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 bg-[var(--glass-bg)] border border-[var(--glass-border)] backdrop-blur-md rounded-lg p-0.5 transition-all">
                       <button
                         onClick={(event) => {
@@ -473,10 +523,29 @@ export function Sidebar() {
                   </>
                 )}
               </div>
+                )}
+              </SortableRow>
             );
           })}
         </div>
       </div>
+      <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
+        {(source) => {
+          const id = String(source.id);
+          const folder = id.startsWith('folder-') ? folders.find((item) => `folder-${item.id}` === id) : undefined;
+          const tag = id.startsWith('tag-') ? tags.find((item) => `tag-${item.id}` === id) : undefined;
+          if (!folder && !tag) return null;
+          const FolderIcon = folder ? iconMap[folder.icon] : null;
+          const label = folder?.name ?? tag?.name;
+          return (
+            <div className="pointer-events-none flex max-w-[190px] items-center gap-2 rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-[13px] font-semibold text-[var(--moon)] shadow-2xl backdrop-blur-xl">
+              {folder ? (FolderIcon ? <FolderIcon size={14} /> : <Folder size={14} />) : <span className="h-2.5 w-2.5 rounded-full" style={{ background: tag?.color }} />}
+              <span className="truncate">{label}</span>
+            </div>
+          );
+        }}
+      </DragOverlay>
+      </DragDropProvider>
 
       {/* 底部 */}
       <div className="p-2 pb-3 pt-3 border-t border-[rgba(192,200,216,0.06)] space-y-0.5 flex-shrink-0">
@@ -488,11 +557,32 @@ export function Sidebar() {
   );
 }
 
-function SidebarItem({ active, onClick, icon, label, badge, badgeColor }: {
-  active?: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number; badgeColor?: string;
+function SidebarItem({ active, onClick, icon, label, badge, badgeColor, dragHandleRef, dragLabel }: {
+  active?: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  badge?: number;
+  badgeColor?: string;
+  dragHandleRef?: React.Ref<HTMLSpanElement>;
+  dragLabel?: string;
 }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 ${active ? 'bg-[rgba(210,210,220,0.1)] text-[var(--mint)] shadow-[0_0_12px_rgba(210,210,220,0.1)]' : 'text-[var(--moon-dim)] hover:text-[var(--moon)] hover:bg-[rgba(192,200,216,0.05)]'}`}>
+    <button
+      onClick={onClick}
+      className={`group w-full flex items-center gap-2 px-3 py-2 rounded-xl transition-all duration-200 ${active ? 'bg-[rgba(210,210,220,0.1)] text-[var(--mint)] shadow-[0_0_12px_rgba(210,210,220,0.1)]' : 'text-[var(--moon-dim)] hover:text-[var(--moon)] hover:bg-[rgba(192,200,216,0.05)]'}`}
+    >
+      {dragHandleRef && (
+        <span
+          ref={dragHandleRef}
+          onClick={(event) => event.stopPropagation()}
+          className="-ml-1 flex h-6 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-[var(--moon-faint)] opacity-60 transition-all group-hover:bg-[rgba(210,210,220,0.06)] group-hover:opacity-90 hover:!opacity-100 active:cursor-grabbing"
+          title={dragLabel}
+          aria-label={dragLabel}
+        >
+          <GripVertical size={12} />
+        </span>
+      )}
       <span className={active ? 'text-[var(--mint)]' : 'text-[var(--moon-faint)]'}>{icon}</span>
       <span className="text-[13px] font-semibold flex-1 text-left">{label}</span>
       {badge !== undefined && <span className="text-[10px] px-1.5 py-0.5 rounded-full font-semibold" style={{ background: `${badgeColor || 'var(--mint)'}22`, color: badgeColor || 'var(--mint)' }}>{badge}</span>}

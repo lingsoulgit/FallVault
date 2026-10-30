@@ -1,13 +1,54 @@
+import { DragDropProvider, DragOverlay } from '@dnd-kit/react';
+import type { DragEndEvent } from '@dnd-kit/react';
+import { isSortable } from '@dnd-kit/react/sortable';
 import { useAppStore } from '@/stores/appStore';
+import { useToastStore } from '@/stores/toastStore';
 import { EntryCard } from './EntryCard';
+import { SortableRow } from './SortableRow';
 import { Lock, Loader2 } from 'lucide-react';
 import { RecycleBin } from './RecycleBin';
 import { FAVORITES_VIEW_ID, TRASH_VIEW_ID } from '@/lib/constants';
+import { reorderEntries } from '@/lib/db';
+
+function reorderVisibleItems<T extends { id: number }>(allItems: T[], visibleBefore: T[], visibleAfter: T[]): T[] {
+  const visibleIds = new Set(visibleBefore.map((item) => item.id));
+  let nextIndex = 0;
+  return allItems.map((item) => visibleIds.has(item.id) ? visibleAfter[nextIndex++] ?? item : item);
+}
 
 export function EntryList() {
-  const { entries, isLoading, searchQuery, selectedFolderId, favorites, selectedTagId } = useAppStore();
+  const {
+    entries, isLoading, searchQuery, selectedFolderId, favorites,
+    setEntries, setFavorites, refreshAll,
+  } = useAppStore();
+  const { addToast } = useToastStore();
 
   const displayEntries = selectedFolderId === FAVORITES_VIEW_ID ? favorites : entries;
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    if (event.canceled) return;
+    const source = event.operation.source;
+    if (!isSortable(source) || source.initialIndex === source.index) return;
+
+    const orderedEntries = [...displayEntries];
+    const [movedEntry] = orderedEntries.splice(source.initialIndex, 1);
+    orderedEntries.splice(source.index, 0, movedEntry);
+    if (selectedFolderId === FAVORITES_VIEW_ID) {
+      setFavorites(orderedEntries);
+      setEntries(reorderVisibleItems(entries, displayEntries, orderedEntries));
+    } else {
+      setEntries(orderedEntries);
+      const visibleFavoritesBefore = displayEntries.filter((entry) => entry.is_favorite);
+      const visibleFavoritesAfter = orderedEntries.filter((entry) => entry.is_favorite);
+      setFavorites(reorderVisibleItems(favorites, visibleFavoritesBefore, visibleFavoritesAfter));
+    }
+    try {
+      await reorderEntries(orderedEntries.map((entry) => entry.id));
+    } catch {
+      await refreshAll();
+      addToast('账号排序保存失败', 'error');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -48,13 +89,31 @@ export function EntryList() {
             : '没有找到匹配的账号'}
         </div>
       )}
-      <div className="grid auto-rows-[160px] grid-cols-1 items-stretch gap-3 pb-20 md:grid-cols-2 xl:grid-cols-3">
-        {displayEntries.map((entry, i) => (
-          <div key={entry.id} className="fade-up h-full" style={{ animationDelay: `${i * 0.05}s`, animationFillMode: 'both' }}>
-            <EntryCard entry={entry} index={i} />
-          </div>
-        ))}
-      </div>
+      <DragDropProvider onDragEnd={handleDragEnd}>
+        <div className="grid auto-rows-[160px] grid-cols-1 items-stretch gap-3 pb-20 md:grid-cols-2 xl:grid-cols-3">
+          {displayEntries.map((entry, i) => (
+            <SortableRow key={entry.id} id={entry.id} index={i} className="fade-up h-full">
+              {(handleRef) => (
+                <EntryCard
+                  entry={entry}
+                  index={i}
+                  dragHandleRef={handleRef as React.Ref<HTMLButtonElement>}
+                />
+              )}
+            </SortableRow>
+          ))}
+        </div>
+        <DragOverlay dropAnimation={{ duration: 240, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
+          {(source) => {
+            const entry = displayEntries.find((item) => item.id === source.id);
+            return entry ? (
+              <div className="pointer-events-none rounded-xl border border-[var(--glass-border)] bg-[var(--glass-bg)] px-4 py-3 text-sm font-semibold text-[var(--moon)] shadow-2xl backdrop-blur-xl">
+                {entry.title}
+              </div>
+            ) : null;
+          }}
+        </DragOverlay>
+      </DragDropProvider>
     </div>
   );
 }

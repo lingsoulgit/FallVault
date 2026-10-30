@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Lock, Star, ExternalLink, Copy, Eye, EyeOff, Edit2, Trash2, Paperclip, Folder } from 'lucide-react';
+import { Lock, Star, ExternalLink, Copy, Eye, EyeOff, Edit2, Trash2, Paperclip, Folder, GripVertical } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
 import { toggleFavorite, moveEntryToTrash } from '@/lib/db';
@@ -31,7 +31,11 @@ function useImgError() {
   return { error, onError };
 }
 
-export function EntryCard({ entry, index = 0 }: { entry: Entry; index?: number }) {
+export function EntryCard({ entry, index = 0, dragHandleRef }: {
+  entry: Entry;
+  index?: number;
+  dragHandleRef?: React.Ref<HTMLButtonElement>;
+}) {
   const { setEditingEntry, setIsEntryModalOpen, setDetailOpen, setSelectedEntryId, refreshAll, setConfirmDialog, settings } = useAppStore();
   const { addToast } = useToastStore();
   const isEn = settings?.language === 'en';
@@ -161,6 +165,18 @@ export function EntryCard({ entry, index = 0 }: { entry: Entry; index?: number }
 
             {/* 头部 */}
             <div className="flex items-start gap-2 pr-8">
+              {dragHandleRef && (
+                <button
+                  type="button"
+                  ref={dragHandleRef}
+                  onClick={(event) => event.stopPropagation()}
+                  className="-ml-1 -mt-0.5 flex h-7 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-[var(--moon-faint)] transition-colors hover:bg-[rgba(210,210,220,0.08)] hover:text-[var(--mint)] active:cursor-grabbing"
+                  title="拖动排序"
+                  aria-label="拖动排序账号"
+                >
+                  <GripVertical size={13} />
+                </button>
+              )}
               <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg transition-all duration-300"
                 style={{
                   background: hasCustomIcon ? 'transparent' : 'var(--mint-dim)',

@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
-import { X, Save, Star, Eye, EyeOff, History, ImagePlus, Globe, KeyRound, RefreshCw, Plus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { DragDropProvider, DragOverlay } from '@dnd-kit/react';
+import { isSortable } from '@dnd-kit/react/sortable';
+import { X, Save, Star, Eye, EyeOff, History, ImagePlus, Globe, KeyRound, RefreshCw, Plus, GripVertical } from 'lucide-react';
 import { useAppStore } from '@/stores/appStore';
 import { useToastStore } from '@/stores/toastStore';
 import { createEntry, updateEntry, getPasswordHistory, getEntryTags, getAttachments, addAttachment, deleteAttachment } from '@/lib/db';
@@ -19,6 +21,7 @@ import { BUILTIN_TEMPLATES } from '@/lib/templates';
 import { encryptedFieldLabel } from '@/lib/entryEncryption';
 import { startWindowDragFromBackdrop } from '@/lib/windowDrag';
 import { FAVORITES_VIEW_ID, TRASH_VIEW_ID } from '@/lib/constants';
+import { SortableRow } from '@/components/SortableRow';
 
 export function EntryModal() {
   const {
@@ -41,6 +44,16 @@ export function EntryModal() {
   const [strength, setStrength] = useState<any>(null);
   const [customIcon, setCustomIcon] = useState<string | null>(null);
   const [customFields, setCustomFields] = useState<{ key: string; value: string; hidden?: boolean }[]>([]);
+  const customFieldIds = useRef(new WeakMap<object, string>());
+  const nextCustomFieldId = useRef(0);
+  const getCustomFieldId = (field: { key: string; value: string; hidden?: boolean }) => {
+    let id = customFieldIds.current.get(field);
+    if (!id) {
+      id = `custom-field-${nextCustomFieldId.current++}`;
+      customFieldIds.current.set(field, id);
+    }
+    return id;
+  };
   // 密码生成面板状态
   const [showGenPanel, setShowGenPanel] = useState(false);
   const [genLen, setGenLen] = useState(16);
@@ -633,27 +646,63 @@ export function EntryModal() {
               </button>
             </div>
             {customFields.length > 0 && (
-              <div className="space-y-2">
-                {customFields.map((f, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input value={f.key} onChange={e => { const n = [...customFields]; n[i].key = e.target.value; setCustomFields(n); }}
-                      placeholder="字段名（如：会员ID）" className="rune-input flex-1 px-2.5 py-2 text-xs" />
-                    <div className="relative flex-[1.4]">
-                      <input type={f.hidden ? 'password' : 'text'} value={f.value}
-                        onChange={e => { const n = [...customFields]; n[i].value = e.target.value; setCustomFields(n); }}
-                        placeholder="值" className="rune-input w-full pl-2.5 pr-8 py-2 text-xs" />
-                      <button type="button" onClick={() => { const n = [...customFields]; n[i].hidden = !n[i].hidden; setCustomFields(n); }}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-[var(--moon-faint)] hover:text-[var(--moon)]" title="隐藏/显示">
-                        {f.hidden ? <EyeOff size={12} /> : <Eye size={12} />}
-                      </button>
-                    </div>
-                    <button type="button" onClick={() => setCustomFields(customFields.filter((_, j) => j !== i))}
-                      className="p-1.5 rounded text-[var(--moon-faint)] hover:text-[var(--danger,#D47070)]" title="删除字段">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                <DragDropProvider onDragEnd={(event) => {
+                if (event.canceled) return;
+                const source = event.operation.source;
+                if (!isSortable(source) || source.initialIndex === source.index) return;
+                setCustomFields((fields) => {
+                  const next = [...fields];
+                  const [moved] = next.splice(source.initialIndex, 1);
+                  next.splice(source.index, 0, moved);
+                  return next;
+                });
+              }}>
+                <div className="space-y-2">
+                  {customFields.map((f, i) => (
+                    <SortableRow key={getCustomFieldId(f)} id={getCustomFieldId(f)} index={i} className="rounded-lg">
+                      {(handleRef) => (
+                        <div className="flex items-center gap-2 rounded-lg">
+                          <button
+                            type="button"
+                            ref={handleRef as React.Ref<HTMLButtonElement>}
+                            onClick={(event) => event.stopPropagation()}
+                            className="flex h-8 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-[var(--moon-faint)] transition-colors hover:bg-[rgba(210,210,220,0.08)] hover:text-[var(--mint)] active:cursor-grabbing"
+                            title={isEn ? 'Drag to reorder field' : '拖动排序字段'}
+                            aria-label={isEn ? 'Drag to reorder field' : '拖动排序字段'}
+                          >
+                            <GripVertical size={13} />
+                          </button>
+                          <input value={f.key} onChange={e => { const n = [...customFields]; n[i].key = e.target.value; setCustomFields(n); }}
+                            placeholder="字段名（如：会员ID）" className="rune-input flex-1 px-2.5 py-2 text-xs" />
+                          <div className="relative flex-[1.4]">
+                            <input type={f.hidden ? 'password' : 'text'} value={f.value}
+                              onChange={e => { const n = [...customFields]; n[i].value = e.target.value; setCustomFields(n); }}
+                              placeholder="值" className="rune-input w-full pl-2.5 pr-8 py-2 text-xs" />
+                            <button type="button" onClick={() => { const n = [...customFields]; n[i].hidden = !n[i].hidden; setCustomFields(n); }}
+                              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-[var(--moon-faint)] hover:text-[var(--moon)]" title="隐藏/显示">
+                              {f.hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                            </button>
+                          </div>
+                          <button type="button" onClick={() => setCustomFields(customFields.filter((_, j) => j !== i))}
+                            className="p-1.5 rounded text-[var(--moon-faint)] hover:text-[var(--danger,#D47070)]" title="删除字段">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
+                    </SortableRow>
+                  ))}
+                </div>
+                <DragOverlay dropAnimation={{ duration: 220, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' }}>
+                  {(source) => {
+                    const field = customFields.find((item) => getCustomFieldId(item) === String(source.id));
+                    return field ? (
+                      <div className="pointer-events-none max-w-[320px] truncate rounded-lg border border-[var(--glass-border)] bg-[var(--glass-bg)] px-3 py-2 text-xs font-semibold text-[var(--moon)] shadow-2xl backdrop-blur-xl">
+                        {field.key || (isEn ? 'Custom field' : '自定义字段')}
+                      </div>
+                    ) : null;
+                  }}
+                </DragOverlay>
+              </DragDropProvider>
             )}
           </div>
 
