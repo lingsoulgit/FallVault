@@ -164,7 +164,7 @@ export function EntryCard({ entry, index = 0, dragHandleRef }: {
             />
 
             {/* 头部 */}
-            <div className="flex items-start gap-2 pr-8">
+            <div className="flex items-center gap-2 pr-8">
               {dragHandleRef && (
                 <button
                   type="button"

@@ -219,7 +219,7 @@ export function TopBar() {
   return (
     <div className="rune-panel m-3 mb-0 p-3 flex items-center gap-3">
       <div className="relative flex-1 max-w-md group">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--moon-faint)] group-focus-within:text-[var(--mint)] transition-colors" size={17} />
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--moon)] group-focus-within:text-[var(--mint)] transition-colors" size={18} strokeWidth={2.25} />
         <input
           ref={searchRef}
           value={searchQuery}

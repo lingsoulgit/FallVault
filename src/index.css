@@ -65,6 +65,8 @@
 }
 
 @layer components {
+  .lock-screen-password::-ms-reveal { display: none; }
+
   /* 赛博魔法阵面板 - 毛玻璃 + 银线边框（用户指定样式） */
   .rune-panel {
     background: var(--glass-bg, rgba(255, 245, 245, 0.2));

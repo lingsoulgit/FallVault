@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { X } from 'lucide-react';
+import { Eye, EyeOff, X } from 'lucide-react';
 import { useToastStore } from '@/stores/toastStore';
 import { setupMasterPassword, unlockVault, hasMasterPassword, migratePlaintextToEncrypted } from '@/lib/crypto';
 import { useIntegrityStore } from '@/stores/integrityStore';
@@ -151,14 +151,26 @@ export function LockScreen({ onUnlocked }: LockScreenProps) {
             <label className="text-xs mb-1.5 block" style={{ color: 'var(--moon-dim)' }}>
               {isSetup ? '主密码' : '主密码'}
             </label>
-            <input
-              type={showPwd ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={isSetup ? '设置主密码（至少 4 位）' : '请输入主密码'}
-              autoFocus
-              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none transition-all focus:border-[var(--mint)] text-[var(--moon)] placeholder:text-[var(--moon-faint)]"
-            />
+            <div className="relative">
+              <input
+                type={showPwd ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={isSetup ? '设置主密码（至少 4 位）' : '请输入主密码'}
+                autoFocus
+                className="lock-screen-password w-full px-4 pr-11 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none transition-all focus:border-[var(--mint)] text-[var(--moon)] placeholder:text-[var(--moon-faint)]"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPwd((visible) => !visible)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-[var(--moon-dim)] transition-colors hover:text-[var(--mint)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mint)]"
+                title={showPwd ? '隐藏主密码' : '显示主密码'}
+                aria-label={showPwd ? '隐藏主密码' : '显示主密码'}
+                aria-pressed={showPwd}
+              >
+                {showPwd ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+              </button>
+            </div>
           </div>
 
           {isSetup && (
@@ -166,27 +178,27 @@ export function LockScreen({ onUnlocked }: LockScreenProps) {
               <label className="text-xs mb-1.5 block" style={{ color: 'var(--moon-dim)' }}>
                 确认主密码
               </label>
-              <input
-                type={showPwd ? 'text' : 'password'}
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="再次输入主密码"
-                className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none transition-all focus:border-[var(--mint)] text-[var(--moon)] placeholder:text-[var(--moon-faint)]"
-              />
+              <div className="relative">
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  placeholder="再次输入主密码"
+                  className="lock-screen-password w-full px-4 pr-11 py-3 rounded-xl bg-white/5 border border-white/10 text-sm outline-none transition-all focus:border-[var(--mint)] text-[var(--moon)] placeholder:text-[var(--moon-faint)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd((visible) => !visible)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-[var(--moon-dim)] transition-colors hover:text-[var(--mint)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--mint)]"
+                  title={showPwd ? '隐藏主密码' : '显示主密码'}
+                  aria-label={showPwd ? '隐藏主密码' : '显示主密码'}
+                  aria-pressed={showPwd}
+                >
+                  {showPwd ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+                </button>
+              </div>
             </div>
           )}
-
-          <div className="flex items-center justify-between text-xs" style={{ color: 'var(--moon-dim)' }}>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showPwd}
-                onChange={(e) => setShowPwd(e.target.checked)}
-                className="accent-[var(--mint)]"
-              />
-              显示密码
-            </label>
-          </div>
 
           <button
             type="submit"

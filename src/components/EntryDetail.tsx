@@ -287,7 +287,7 @@ export function EntryDetail() {
 
               return (
                 <div key={i} className="group flex min-w-0 items-center gap-2">
-                  <span className="w-[38%] max-w-[180px] shrink-0 break-words text-[11px] font-semibold uppercase leading-tight tracking-wider text-[var(--moon-dim)]">
+                  <span className="w-[38%] max-w-[180px] shrink-0 break-words text-[11px] font-semibold normal-case leading-tight tracking-normal text-[var(--moon-dim)]">
                     {f.key}
                   </span>
                   <code className="min-w-0 flex-1 truncate break-all text-[13px] font-mono font-semibold text-[var(--moon)]">
