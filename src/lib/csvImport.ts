@@ -76,7 +76,7 @@ export async function importBrowserCsv(): Promise<{ imported: number; skipped: n
       icon: '',
       folder_id: null,
       is_favorite: false,
-    });
+    }, [], 'end');
     imported++;
   }
   return { imported, skipped };

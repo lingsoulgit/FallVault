@@ -91,7 +91,7 @@ export function TotpMigrationModal() {
     let ok = 0;
     for (const item of pending) {
       try {
-        await createEntry({ title: item.title, totp_secret: item.secret, website: '', username: '', password: '', notes: '' }, []);
+        await createEntry({ title: item.title, totp_secret: item.secret, website: '', username: '', password: '', notes: '' }, [], 'end');
         ok++;
       } catch {
         skip++;

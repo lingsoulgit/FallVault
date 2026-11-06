@@ -360,14 +360,21 @@ export async function getEntryTags(entryId: number): Promise<number[]> {
   return rows.map((r) => Number(r.tag_id));
 }
 
-export async function createEntry(entry: Partial<Entry>, tagIds: number[] = []): Promise<number> {
+export async function createEntry(
+  entry: Partial<Entry>,
+  tagIds: number[] = [],
+  sortPosition: 'start' | 'end' = 'start',
+): Promise<number> {
   const key = getMasterKey();
   const cfJson = entry.customFields && entry.customFields.length
     ? await encryptField(key as any, JSON.stringify(entry.customFields))
     : '';
+  const sortOrderExpression = sortPosition === 'start'
+    ? '(SELECT COALESCE(MIN(sort_order), 0) - 1 FROM entries)'
+    : '(SELECT COALESCE(MAX(sort_order), -1) + 1 FROM entries)';
   const result = await getDb().execute(
     `INSERT INTO entries (title, username, password, totp_secret, website, notes, icon, folder_id, is_favorite, custom_fields, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM entries))`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${sortOrderExpression})`,
     [
       entry.title || '',
       entry.username ? await encryptField(key as any, entry.username) : '',

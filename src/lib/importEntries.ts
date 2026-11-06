@@ -236,7 +236,7 @@ export async function importEntries(
         website: row.website || '',
         notes: row.notes || '',
         folder_id: undefined,
-      }, tagIds);
+      }, tagIds, 'end');
       localSeen.add(k);
       result.imported++;
     } catch (e: any) {
